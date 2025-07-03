@@ -134,7 +134,6 @@ public class SoundCanvas {
 	}
 
 	public boolean flushMidi() {
-//		System.out.println(this.uartBuffer[0]);
 		loop:
 		for (int i = 0; i < 2; i++) {
 			ByteRingBuffer buffer = this.uartBuffer[i];
@@ -171,7 +170,6 @@ public class SoundCanvas {
 	}
 	
 	protected void handleLongMessage(int portNo, byte[] msg, int len) {
-//		System.out.printf("SysEx: %s\n", toHex(Arrays.copyOf(msg, len)));
 		TG tg = this.tg;
 		int[] packets = PacketEncoder.encodeLongMessage(portNo, msg, 0, len);
 		for (int i = 0, l = packets.length; i < l; i++) {
@@ -279,7 +277,7 @@ public class SoundCanvas {
 			ByteBuffer byteBuffer = ByteBuffer.wrap(buffer).order(ByteOrder.BIG_ENDIAN);
 			for (int i = 0, len = (int) (file.length() - 4); i < len; i++) {
 				int dword = byteBuffer.getInt(i);
-				if (dword == 0x240FBA04) {
+				if (dword == 0x240FBA04 || dword == 0x240F8845) {
 					System.out.printf("Found opcode at 0x%08x\n", i);
 					file.seek(i);
 					System.out.println("Replacing with Nop");
@@ -288,7 +286,21 @@ public class SoundCanvas {
 					System.out.println("Patch completed");
 					return;
 				}
-				if (dword == 0x9090BA04) {
+				if (dword == 0xE00FBA04) {
+					i -= 2;
+					System.out.printf("Found opcode at 0x%08x\n", i);
+					file.seek(i);
+					System.out.println("Replacing with Nop");
+					file.write(0x90);
+					file.write(0x90);
+					file.write(0x90);
+					file.write(0x90);
+					System.out.println("Patch completed");
+					return;
+				}
+				if (dword == 0x9090BA04 || dword == 0x90908845) {
+					if ((byteBuffer.getShort(i - 2) & 0xFFFF) == 0x9090)
+						i -= 2;
 					System.out.printf("Found patched opcode at 0x%08x\n", i);
 					System.out.println("Patch completed");
 					return;

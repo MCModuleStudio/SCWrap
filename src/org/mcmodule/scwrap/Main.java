@@ -20,7 +20,6 @@ public class Main {
 		String libraryPath = "SCCore.dll";
 		String midiA = null, midiB = null;
 
-		// 参数解析
 		for (int i = 0; i < args.length; i++) {
 			switch (args[i]) {
 				case "--rate":
