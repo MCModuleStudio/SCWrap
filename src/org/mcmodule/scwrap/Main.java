@@ -53,11 +53,11 @@ public class Main {
 				case "--help":
 				case "-h":
 					System.out.println("Usage:");
-					System.out.println("  -r, --rate      <sample rate>  Set sample rate (default: 32000)");
-					System.out.println("  -s, --block      <block size>  Set block size (default: 128)");
-					System.out.println("  -l, --lib      <library path>  Set native library path (default: SCCore.dll)");
-					System.out.println("  -a, --midiA, -midi <port name> Set MIDI input A");
-					System.out.println("  -b, --midiB        <port name> Set MIDI input B");
+					System.out.println("  -r, --rate       <sample rate>   Set sample rate (default: 32000)");
+					System.out.println("  -s, --block       <block size>   Set block size (default: 128)");
+					System.out.println("  -l, --lib       <library path>   Set SCCore.dll library path (default: SCCore.dll)");
+					System.out.println("  -a, --midiA, -midi <port name>   Set MIDI input A");
+					System.out.println("  -b, --midiB        <port name>   Set MIDI input B");
 					return;
 				default:
 					System.err.println("Unknown option: " + args[i]);
