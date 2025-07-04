@@ -3,17 +3,33 @@ SCWrap wraps Roland's SCCore.dll from the Sound Canvas VA plugin. It restores su
 
 ## Usage
 ```
-  -r, --rate       <sample rate>   Set sample rate (default: 32000)
-  -s, --block       <block size>   Set block size (default: 128)
-  -l, --lib       <library path>   Set SCCore.dll library path (default: SCCore.dll)
-  -a, --midiA, -midi <port name>   Set MIDI input A
-  -b, --midiB        <port name>   Set MIDI input B
+  -r, --rate            <sample rate>   Set sample rate (default: 32000)
+  -s, --block            <block size>   Set block size (default: 128)
+  -l, --lib            <library path>   Set SCCore.dll library path (default: SCCore.dll)
+  -a, --midiA, -midi <port name/file>   Set MIDI input A
+  -b, --midiB        <port name/file>   Set MIDI input B
+  -o, --output            <file name>   Set audio output file
 ```
 
 ## Multi-instance
 SCCore.dll does not natively support multiple instances, But your can copy dll to temporary folder and then load it. This is the same method used internally by Roland Sound Canvas VA itself.
 
 ## Supported SCCore.dll
+## 2015 version (64bit)
+```
+Size: 27436032 Bytes : 26 MiB
+CRC32: D4206EEA
+CRC64: 034876B5BE60430D
+SHA256: c87b6c0617d28a60de8b0908d7c1b830825b4c6b798789497a069606b3a464df
+SHA1: d12d969b69c9d361a1ccf69805275667ecf1d4bb
+BLAKE2sp: 496eae4b6bfc76eadc1d575d9120871467cf2428d500b3869cf0038303fb2d3b
+MD5: ae88ac4f4bf8ef3fbcb83a56ebaafc02
+XXH64: 5777456B7F32C7F0
+SHA384: d8cd9dfd1a02375490aad706966e47757a8d3431a56e059f504ce3beaa99aa2d109c9a27c9b4b8802899fbcfbab58dff
+SHA512: da765db8d1b4dbbe021727894fc00fd6a225be52dffc20881f18e31b384672a8932213ae136659b278ebdf275c5c51552b02455c83ec89972fe33862d31d3ac3
+SHA3-256: ba033a891dd3ad002b5beed79c39f44d90a5fb764a55b45ff5b17897458d6952
+
+```
 ### 2016 version (32bit, untested)
 ```
 Size: 27472384 Bytes : 26 MiB
@@ -27,6 +43,21 @@ XXH64: A27E0D3D6FE95B56
 SHA384: 63da20163f379e97202af0da913cb1c4759bda8f0db1b19f177b84fb2a8ca35d99247b0147c573d9475b35d498cba1f3
 SHA512: 0b48f48e53e931cbabb053b51d0448a533aeae69c07be0a082050b376dc1667406d9fb0f73529c74f992d6e727f8a814d4be56bfab1c7d636d53eebc6a6ee10c
 SHA3-256: b65203b28c50fffe2c31390c79d433ddfffdacb933c35c28269ca9f810a24406
+```
+### 2016 version (64bit)
+```
+Size: 27358208 Bytes : 26 MiB
+CRC32: 700EDAA0
+CRC64: D59AEF1C87A6A0DF
+SHA256: f8b0dbedfb683c581f76f68105864b4365f33005fd369f486daf4d1c5b2414e1
+SHA1: e87d9ae914a07b29a7bde4a0b7e2b9f1bea77b67
+BLAKE2sp: 387f69f3f7438ae1f2fdc69a911640d12bbd152ea39796f1e7c5f45eacad053e
+MD5: 6abfbf61869fc436d76c93d1bc7e2735
+XXH64: 46CF517ECA8150F8
+SHA384: a1ad12215fdf364dddda556959d930151387599db56e240c7f6b3eec84328f5277b9e2a8e8801959a434210d33a3bbc0
+SHA512: 5ab2d0accdb278f913a2151d1f8f1cf78696468eb685ced2fc799eda922c72936ed819077c34d90f7783993e77d536f643ad5c71043eb7132378bf0d753b29e2
+SHA3-256: b8d50761a4d44c713e4211d90e0ff5e4be324ead44285235ef5f69dc0f65abb7
+
 ```
 ### 2017 version (64bit)
 ```

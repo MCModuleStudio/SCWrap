@@ -2,9 +2,8 @@ package org.mcmodule.scwrap;
 
 public class PacketEncoder {
 	public static int encodeShortMessage(int cableNumber, int midiData) {
-
 		int status = (midiData & 0xF0) >> 4;
-		byte header = (byte) (cableNumber << 4);
+		int header = (cableNumber & 0xF) << 4;
 		
 		if (status > 0x7 && status < 0xF) {
 			header |= status;
@@ -43,7 +42,7 @@ public class PacketEncoder {
 					header |= 15;
 					break;
 				}
-				return (header & 0xFF) | ((midiData & 0xFF) << 8) | (((midiData >> 8) & 0xFF) << 16) | (((midiData >> 16) & 0xFF) << 24);
+				return header | ((midiData & 0xFF) << 8) | (((midiData >> 8) & 0xFF) << 16) | (((midiData >> 16) & 0xFF) << 24);
 			} else {
 				return 0;
 			}
@@ -60,34 +59,34 @@ public class PacketEncoder {
 		int[] output = new int[maxPackets];
 
 		int packetCount = 0;
-		byte header = (byte) (cableNumber << 4);
+		int header = (cableNumber & 0xF) << 4;
 		int inputIndex = off;
 
 		while (packetCount < maxPackets) {
-			byte b1 = 0, b2 = 0, b3 = 0;
+			int b1 = 0, b2 = 0, b3 = 0;
 
 			if (inputIndex < len) {
-				b1 = input[inputIndex++];
-				if (b1 == (byte) 0xF7) {
+				b1 = input[inputIndex++] & 0xFF;
+				if (b1 == 0xF7) {
 					output[packetCount++] = (header | 5) | 0xF700;
 					break;
 				}
 
 				if (inputIndex < len) {
-					b2 = input[inputIndex++];
-					if (b2 == (byte) 0xF7) {
-						output[packetCount++] = (header | 6) | ((b1 & 0xFF) << 8) | 0xF70000;
+					b2 = input[inputIndex++] & 0xFF;
+					if (b2 == 0xF7) {
+						output[packetCount++] = (header | 6) | (b1 << 8) | 0xF70000;
 						break;
 					}
 
 					if (inputIndex < len) {
-						b3 = input[inputIndex++];
-						if (b3 == (byte) 0xF7) {
-							output[packetCount++] = (header | 7) | ((b2 & 0xFF) << 16) | ((b1 & 0xFF) << 8) | 0xF7000000;
+						b3 = input[inputIndex++] & 0xFF;
+						if (b3 == 0xF7) {
+							output[packetCount++] = (header | 7) | (b2 << 16) | (b1 << 8) | 0xF7000000;
 							break;
 						}
 
-						output[packetCount++] = (header | 4) | ((b3 & 0xFF) << 24) | ((b2 & 0xFF) << 16) | ((b1 & 0xFF) << 8);
+						output[packetCount++] = (header | 4) | (b3 << 24) | (b2 << 16) | (b1 << 8);
 					} else break;
 				} else break;
 			} else break;

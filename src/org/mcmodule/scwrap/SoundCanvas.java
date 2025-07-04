@@ -63,10 +63,12 @@ public class SoundCanvas {
 	public boolean postMidi(int portNo, int data) {
 		int len = getDataLen(data & 0xFF) + 1;
 		ByteRingBuffer buffer = this.uartBuffer[portNo];
-		for (int i = 0; i < len; i++) {
-			if (!buffer.offer((byte) ((data >> (i << 3)) & 0xFF))) {
-				notifyBufferFull(portNo);
-				return false;
+		synchronized (this) {
+			for (int i = 0; i < len; i++) {
+				if (!buffer.offer((byte) ((data >> (i << 3)) & 0xFF))) {
+					notifyBufferFull(portNo);
+					return false;
+				}
 			}
 		}
 		return true;
@@ -75,10 +77,12 @@ public class SoundCanvas {
 	public boolean postMidi(int portNo, byte[] data) {
 		int len = data.length;
 		ByteRingBuffer buffer = this.uartBuffer[portNo];
-		for (int i = 0; i < len; i++) {
-			if (!buffer.offer(data[i])) {
-				notifyBufferFull(portNo);
-				return false;
+		synchronized (this) {
+			for (int i = 0; i < len; i++) {
+				if (!buffer.offer(data[i])) {
+					notifyBufferFull(portNo);
+					return false;
+				}
 			}
 		}
 		return true;
@@ -170,6 +174,7 @@ public class SoundCanvas {
 	}
 	
 	protected void handleLongMessage(int portNo, byte[] msg, int len) {
+		if (msg[1] == 0x43 && msg[2] == 0x00 && msg[3] == 0x5D) return; // Fix XG bulk dump cause crash
 		TG tg = this.tg;
 		int[] packets = PacketEncoder.encodeLongMessage(portNo, msg, 0, len);
 		for (int i = 0, l = packets.length; i < l; i++) {
@@ -244,9 +249,9 @@ public class SoundCanvas {
 		if (index < 0 || index + length > arrlen) throw new ArrayIndexOutOfBoundsException();
 	}
 	
-	private static String toHex(byte[] data) {
+	protected static String toHex(byte[] data, int len) {
 		StringJoiner sj = new StringJoiner(" ");
-		for (int i = 0; i < data.length; i++) {
+		for (int i = 0; i < len; i++) {
 			int b = data[i] & 0xFF;
 			sj.add(hex(b >> 4) + hex(b & 0xF));
 		}
@@ -277,12 +282,11 @@ public class SoundCanvas {
 			ByteBuffer byteBuffer = ByteBuffer.wrap(buffer).order(ByteOrder.BIG_ENDIAN);
 			for (int i = 0, len = (int) (file.length() - 4); i < len; i++) {
 				int dword = byteBuffer.getInt(i);
-				if (dword == 0x240FBA04 || dword == 0x240F8845) {
+				if (dword == 0x240FBA04 || dword == 0x240F8845 || dword == 0x240F8844) {
 					System.out.printf("Found opcode at 0x%08x\n", i);
 					file.seek(i);
 					System.out.println("Replacing with Nop");
-					file.write(0x90);
-					file.write(0x90);
+					file.writeShort(0x9090);
 					System.out.println("Patch completed");
 					return;
 				}
@@ -291,14 +295,11 @@ public class SoundCanvas {
 					System.out.printf("Found opcode at 0x%08x\n", i);
 					file.seek(i);
 					System.out.println("Replacing with Nop");
-					file.write(0x90);
-					file.write(0x90);
-					file.write(0x90);
-					file.write(0x90);
+					file.writeInt(0x90909090);
 					System.out.println("Patch completed");
 					return;
 				}
-				if (dword == 0x9090BA04 || dword == 0x90908845) {
+				if (dword == 0x9090BA04 || dword == 0x90908845 || dword == 0x90908844) {
 					if ((byteBuffer.getShort(i - 2) & 0xFFFF) == 0x9090)
 						i -= 2;
 					System.out.printf("Found patched opcode at 0x%08x\n", i);
