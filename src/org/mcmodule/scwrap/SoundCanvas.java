@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.NoSuchElementException;
 import java.util.StringJoiner;
 
@@ -198,21 +199,49 @@ public class SoundCanvas {
 	}
 
 	public float getSampleRate() {
-		return sampleRate;
+		return this.sampleRate;
 	}
 
 	public void setSampleRate(float sampleRate) {
 		this.sampleRate = sampleRate;
-		tg.TG_setSampleRate(sampleRate);
+		this.tg.TG_setSampleRate(sampleRate);
 	}
 
 	public int getBufferSize() {
-		return bufferSize;
+		return this.bufferSize;
 	}
 
 	public void setBufferSize(int bufferSize) {
 		this.bufferSize = bufferSize;
-		tg.TG_setMaxBlockSize(bufferSize);
+		this.tg.TG_setMaxBlockSize(bufferSize);
+	}
+	
+	public int getCurrentTotalRunningVoices() {
+		return this.tg.TG_XPgetCurTotalRunningVoices();
+	}
+	
+	public void changeMap(int map) {
+		// THIS METHOD DOES NOT CHANGE EXISTING INSTRUMENT
+		// FIXME: Ignore Bank Select LSB when SC-55 Map selected.
+		// Seems Rx. Bank Select LSB will set on when GS Reset received
+		// So we may need inject Rx. Bank Select LSB after GS Reset received
+		for (int i = 0; i < 16; i++) {
+			// Change Tone-Map 0 Number
+			byte[] syx = "\360\101\020\102\022\100\100\001\000\000\367".getBytes(StandardCharsets.ISO_8859_1);
+			syx[6] |= i;
+			syx[8] = (byte) map;
+			syx[9] = SoundCanvas.checksum(syx, syx.length);
+			this.postMidi(0, syx);
+			this.postMidi(1, syx);
+			// Change Rx. Bank Select LSB
+			syx[6] = (byte) (0x10 | i);
+			syx[7] = 0x24;
+			syx[8] = (byte) (map == 1 ? 0 : 1);
+			syx[9] = 0;
+			syx[9] = SoundCanvas.checksum(syx, syx.length);
+			this.postMidi(0, syx);
+			this.postMidi(1, syx);
+		}
 	}
 	
 	protected void notifyBufferFull(int portNo) {
@@ -261,6 +290,15 @@ public class SoundCanvas {
 	private static String hex(int i) {
 		char ch = (char) (i >= 10 ? (i - 9) ^ 64 : i ^ 48);
 		return new String(new char[] {ch}, 0, 1);
+	}
+	
+	public static byte checksum(byte[] data, int len) {
+		int length = len - 1;
+		int checksum = 0;
+		for (int i = 5; i < length; i++) {
+			checksum += data[i] & 0xFF;
+		}
+		return (byte) (128 - (checksum & 0x7F));
 	}
 	
 	private static TG patchAndLoadLibrary(String libraryPath) {

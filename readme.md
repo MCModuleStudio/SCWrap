@@ -8,11 +8,20 @@ SCWrap wraps Roland's SCCore.dll from the Sound Canvas VA plugin. It restores su
   -l, --lib            <library path>   Set SCCore.dll library path (default: SCCore.dll)
   -a, --midiA, -midi <port name/file>   Set MIDI input A
   -b, --midiB        <port name/file>   Set MIDI input B
+  -p, --midiOut           <port name>   Set MIDI output
   -o, --output            <file name>   Set audio output file
+  -m, --map                <map type>   Set map type
+      --gui                             Open gui
 ```
 
 ## Multi-instance
 SCCore.dll does not natively support multiple instances, But your can copy dll to temporary folder and then load it. This is the same method used internally by Roland Sound Canvas VA itself.
+
+## About GUI and MIDI Output
+
+Since both the GUI and MIDI output require access to internal variables of SCCore, only three versions are supported: **2015 version (64-bit)**, **2017 version (64-bit)**, and **2020 version (64-bit)**.
+
+The **2016 version (64-bit)** will be recognized as the **2017 version (64-bit)** and will work normally, because aside from differences in compilation timestamps and some data in the .rdata section, the .text section is completely identical between the two.
 
 ## Supported SCCore.dll
 ## 2015 version (64bit)
