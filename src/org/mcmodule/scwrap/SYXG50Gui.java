@@ -219,16 +219,14 @@ public class SYXG50Gui extends AbstractGui {
 			barDisplayPanel.add(partBButton);
 			settingPanel.add(barDisplayPanel);
 			tp.add("Settings", settingPanel);
-			pack();
-			setLocationRelativeTo(syxg50Gui);
-			setResizable(false);
-			updateSetting();
-			levelButton.setSelected(true);
-			partAButton.setSelected(true);
 			this.levelButton = levelButton;
 			this.voiceButton = voiceButton;
 			this.partAButton = partAButton;
 			this.partBButton = partBButton;
+			pack();
+			setLocationRelativeTo(syxg50Gui);
+			setResizable(false);
+			updateSetting();
 			levelButton.addActionListener(this);
 			voiceButton.addActionListener(this);
 			partAButton.addActionListener(this);
@@ -280,6 +278,16 @@ public class SYXG50Gui extends AbstractGui {
 				double dB = 20d * Math.log10(gain);
 				this.gainSlider.setValue((int) (dB / 0.2d));
 				this.gainLabel.setText(String.format("%8.1f dB", dB));
+			}
+			if (SYXG50Gui.this.showVoices) {
+				this.voiceButton.setSelected(true);
+			} else {
+				this.levelButton.setSelected(true);
+			}
+			if (SYXG50Gui.this.showPartB) {
+				this.partBButton.setSelected(true);
+			} else {
+				this.partAButton.setSelected(true);
 			}
 			update();
 		}
