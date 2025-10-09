@@ -61,6 +61,7 @@ public class PacketEncoder {
 		int packetCount = 0;
 		int header = (cableNumber & 0xF) << 4;
 		int inputIndex = off;
+		len += off;
 
 		while (packetCount < maxPackets) {
 			int b1 = 0, b2 = 0, b3 = 0;

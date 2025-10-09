@@ -75,8 +75,9 @@ public class SYXG50Gui extends AbstractGui {
 		if (this.setupGui != null) {
 			this.setupGui.update();
 		}
-		int result = readEventQueue(2);
-		if (result != 0) {
+		int result;
+		do {
+			result = readEventQueue(2);
 			if ((result & 0xFF) == 0) {
 				String error = null;
 				switch (result) {
@@ -108,7 +109,7 @@ public class SYXG50Gui extends AbstractGui {
 //					System.out.println("TX: " + SoundCanvas.toHex(decodedMessage, decodedMessage.length));
 //				}
 			}
-		}
+		} while (result != 0);
 	}
 	
 	public boolean inArea(MouseEvent e, int x1, int y1, int x2, int y2) {
@@ -260,7 +261,7 @@ public class SYXG50Gui extends AbstractGui {
 			boolean xgMode = SYXG50Gui.this.xgMode;
 			Map currentMap = getMap();
 			this.mapButton[currentMap.ordinal() - 1].setSelected(true);
-			// FIXME: Support read more mode
+			// TODO: Support read more mode
 			Mode currentMode = xgMode ? Mode.XG : Mode.GS;
 			this.modeButton[currentMode.ordinal()].setSelected(true);
 			boolean notXGMode = !xgMode;

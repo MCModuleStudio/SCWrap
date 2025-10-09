@@ -42,6 +42,16 @@ public class SoundCanvas {
 		}
 	}
 	
+	protected SoundCanvas(float sampleRate, int bufferSize) {
+		this.tg = null;
+		this.sampleRate = sampleRate;
+		this.bufferSize = bufferSize;
+		ByteRingBuffer[] uartBuffer = this.uartBuffer = new ByteRingBuffer[2];
+		for (int i = 0, len = uartBuffer.length; i < len; i++) {
+			uartBuffer[i] = new ByteRingBuffer(65536);
+		}
+	}
+	
 	public Receiver createReceiver(int port) {
 		ByteRingBuffer buffer = this.uartBuffer[port];
 		
@@ -50,7 +60,9 @@ public class SoundCanvas {
 			@Override
 			public void send(MidiMessage message, long timeStamp) {
 				byte[] msg = message.getMessage();
-				buffer.writeFully(msg, 0, msg.length);
+				synchronized (SoundCanvas.this) {
+					buffer.writeFully(msg, 0, msg.length);
+				}
 			}
 
 			@Override
@@ -122,8 +134,8 @@ public class SoundCanvas {
 			tg.TG_Process(bufferL, bufferR, reaming);
 			reaming <<= 1;
 			for (int i = 0; i < reaming; i += 2) {
-				buffer[off + i + 0] = bufferL.getFloat(i << 1);
-				buffer[off + i + 1] = bufferR.getFloat(i << 1);
+				buffer[off + i + 0] += bufferL.getFloat(i << 1);
+				buffer[off + i + 1] += bufferR.getFloat(i << 1);
 			}
 			off += reaming;
 			len -= reaming;
@@ -139,39 +151,43 @@ public class SoundCanvas {
 	}
 
 	public boolean flushMidi() {
-		loop:
-		for (int i = 0; i < 2; i++) {
-			ByteRingBuffer buffer = this.uartBuffer[i];
-			if (buffer.isEmpty()) continue;
-			try {
-				int maxMidiProcess = 200;
-				do {
-					int statusByte = pollBuffer(buffer);
-					if (statusByte == 0xF0) {
-						int j = 0;
-						byte[] sysexBuffer = this.sysexBuffer;
-						sysexBuffer[j++] = (byte) statusByte;
-						do {
-							statusByte = pollBuffer(buffer);
+		synchronized (this) {
+			loop:
+			for (int i = 0; i < 2; i++) {
+				ByteRingBuffer buffer = this.uartBuffer[i];
+				if (buffer.isEmpty()) continue;
+				try {
+					int maxMidiProcess = 200;
+					do {
+						int statusByte = pollBuffer(buffer);
+						if (statusByte == 0xF0) {
+							int j = 0;
+							byte[] sysexBuffer = this.sysexBuffer;
 							sysexBuffer[j++] = (byte) statusByte;
-						} while (statusByte != 0xF7);
-						handleLongMessage(i, sysexBuffer, j);
-					} else {
-						int len = getDataLen(statusByte);
-						int msg = statusByte;
-						for (int j = 1; j <= len; j++)
-							msg |= pollBuffer(buffer) << (j << 3);
-						handleShortMessage(i, msg);
-					}
-				} while(!buffer.isEmpty() && maxMidiProcess-- > 0);
-				continue loop;
-			} catch (RuntimeException e) {
-				e.printStackTrace();
+							do {
+								statusByte = pollBuffer(buffer);
+								sysexBuffer[j++] = (byte) statusByte;
+							} while (statusByte != 0xF7);
+							handleLongMessage(i, sysexBuffer, j);
+						} else {
+							int len = getDataLen(statusByte);
+							int msg = statusByte;
+							for (int j = 1; j <= len; j++)
+								msg |= pollBuffer(buffer) << (j << 3);
+							handleShortMessage(i, msg);
+						}
+					} while(!buffer.isEmpty() && maxMidiProcess-- > 0);
+					continue loop;
+				} catch (RuntimeException e) {
+					e.printStackTrace();
+				}
+				System.out.println("Illegal midi data deteced at port " + i);
 			}
-			System.out.println("Ilegal midi data deteced at port " + i);
+			if (this.tg != null)
+				this.tg.TG_flushMidi();
+			
+			return !(this.uartBuffer[0].isEmpty() || this.uartBuffer[1].isEmpty());
 		}
-		tg.TG_flushMidi();
-		return !(this.uartBuffer[0].isEmpty() || this.uartBuffer[1].isEmpty());
 	}
 	
 	protected void handleLongMessage(int portNo, byte[] msg, int len) {
@@ -298,7 +314,7 @@ public class SoundCanvas {
 		for (int i = 5; i < length; i++) {
 			checksum += data[i] & 0xFF;
 		}
-		return (byte) (128 - (checksum & 0x7F));
+		return (byte) ((128 - checksum) & 0x7F);
 	}
 	
 	private static TG patchAndLoadLibrary(String libraryPath) {

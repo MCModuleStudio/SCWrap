@@ -7,28 +7,53 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.Arrays;
 
-import javax.sound.midi.*;
+import javax.sound.midi.InvalidMidiDataException;
+import javax.sound.midi.MidiDevice;
 import javax.sound.midi.MidiDevice.Info;
+import javax.sound.midi.MidiSystem;
+import javax.sound.midi.MidiUnavailableException;
+import javax.sound.midi.Receiver;
+import javax.sound.midi.Sequence;
+import javax.sound.midi.Sequencer;
+import javax.sound.midi.ShortMessage;
+import javax.sound.midi.SysexMessage;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioFormat.Encoding;
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.SourceDataLine;
 
+import com.sun.jna.Native;
 import com.sun.jna.Pointer;
 import com.sun.jna.platform.win32.Kernel32;
 import com.sun.jna.platform.win32.WinDef.HMODULE;
 
 public class Main {
+	
+	private static final String DEFAULT_PORT_NAME = "Roland SC-VA";
+	private static int portIndex = -1;
+	private static boolean midiTxNoDelay = false;
+	
+	public static void main(String[] args) {
+		try {
+			main0(args);
+		} catch (Throwable e) {
+			Thread currentThread = Thread.currentThread();
+			currentThread.getUncaughtExceptionHandler().uncaughtException(currentThread, e);
+			System.exit(-1);
+		}
+	}
 
-	public static void main(String[] args) throws Throwable {
+	public static void main0(String[] args) throws Throwable {
 		int sampleRate = 32000;
-		int blockSize = 128;
+		int blockSize = 32;
 		String libraryPath = "SCCore.dll";
 		String midiA = null, midiB = null, midiOut = null;
 		String output = null;
 		int map = 4;
-		boolean gui = false;
+		boolean guiEnabled = false;
+		int instances = 1;
 
 		for (int i = 0; i < args.length; i++) {
 			switch (args[i]) {
@@ -80,21 +105,27 @@ public class Main {
 						}
 					} else System.err.println("Missing value for --map");
 					break;
+				case "--inst":
+				case "-i":
+					if (i + 1 < args.length) instances = Integer.parseInt(args[++i]);
+					else System.err.println("Missing value for --inst");
+					break;
 				case "--help":
 				case "-h":
 					System.out.println("Usage:");
 					System.out.println("  -r, --rate            <sample rate>   Set sample rate (default: 32000)");
-					System.out.println("  -s, --block            <block size>   Set block size (default: 128)");
+					System.out.println("  -s, --block            <block size>   Set block size (default: 32)");
 					System.out.println("  -l, --lib            <library path>   Set SCCore.dll library path (default: SCCore.dll)");
 					System.out.println("  -a, --midiA, -midi <port name/file>   Set MIDI input A");
 					System.out.println("  -b, --midiB        <port name/file>   Set MIDI input B");
 					System.out.println("  -p, --midiOut           <port name>   Set MIDI output");
 					System.out.println("  -o, --output            <file name>   Set audio output file");
 					System.out.println("  -m, --map                <map type>   Set map type");
+					System.out.println("  -i, --inst              <instances>   Set instance nummber");
 					System.out.println("      --gui                             Open gui");
 					return;
 				case "--gui":
-					gui = true;
+					guiEnabled = true;
 					break;
 				default:
 					System.err.println("Unknown option: " + args[i]);
@@ -102,7 +133,7 @@ public class Main {
 			}
 		}
 
-		SoundCanvas sc = new SoundCanvas(libraryPath, sampleRate, blockSize);
+		SoundCanvas sc = instances <= 1 ? new SoundCanvas(libraryPath, sampleRate, blockSize) : new MultiInstancedSoundCanvas(new File(libraryPath), sampleRate, blockSize, instances);
 		SCCoreVersion version = SCCoreVersion.identifyVersion(libraryPath);
 		HMODULE tgModule = null;
 		if (version != null) {
@@ -113,7 +144,7 @@ public class Main {
 		}
 		
 		AbstractGui frame = null;
-		if (gui) {
+		if (guiEnabled && instances <= 1) {
 			if (version != null) {
 //				FIXME
 //				try {
@@ -127,6 +158,7 @@ public class Main {
 				System.out.println("Gui require supported SCCore version!");
 			}
 		}
+		final AbstractGui gui = frame;
 		
 		if (map != 4) {
 			sc.changeMap(map);
@@ -159,50 +191,43 @@ public class Main {
 		}
 		
 		Info[] midiInDevice = getMidiInDevice();
+		Info[] midiOutDevice = getMidiOutDevice();
 		System.out.println("MIDI in devices:");
 		for (int i = 0; i < midiInDevice.length; i++) {
 			Info info = midiInDevice[i];
 			System.out.printf("%d. %s\n", i, info);
 		}
+		System.out.println("MIDI out devices:");
+		for (int i = 0; i < midiOutDevice.length; i++) {
+			Info info = midiOutDevice[i];
+			System.out.printf("%d. %s\n", i, info);
+		}
 		Sequencer sequencerA = null, sequencerB = null;
 		Receiver receiver = null;
-		if (midiA != null)
-			sequencerA = openMidiDeviceOrMidiFile(sc, midiInDevice, midiA, 0);
+		sequencerA = openMidiInDeviceOrMidiFile(sc, midiInDevice, midiA, 0);
 		
-		if (midiB != null)
-			sequencerB = openMidiDeviceOrMidiFile(sc, midiInDevice, midiB, 1);
+		sequencerB = openMidiInDeviceOrMidiFile(sc, midiInDevice, midiB, 1);
 		
-		if (midiOut != null) {
+		if ((midiOut != null) || (midiA == null && midiB == null && version != null) && instances <= 1) {
 			if (version != null) {
-				Info[] midiOutDevice = getMidiOutDevice();
-				System.out.println("MIDI out devices:");
-				for (int i = 0; i < midiOutDevice.length; i++) {
-					Info info = midiOutDevice[i];
-					System.out.printf("%d. %s\n", i, info);
-				}
-				Info info = findMidiDevice(midiOutDevice, midiOut);
-				if (info == null) {
-					System.err.printf("No such device: %s\n", midiOut);
-					return;
-				}
-				System.out.printf("Open midi out device: %s\n", info.getName());
-				MidiDevice midiDevice;
-				try {
-					midiDevice = MidiSystem.getMidiDevice(info);
-					midiDevice.open();
-					receiver = midiDevice.getReceiver();
-				} catch (MidiUnavailableException e) {
-					System.err.printf("Unable open midi out device: %s\n", info.getName());
-					e.printStackTrace();
-				}
-				
+				// Fix bulk dump cause softlock
+				// This is a temporary fix. It's better to move MIDI output to other thread.
+				// Because SC-8820 uses interrupt to handle MIDI output. When buffer full, SC-8820 blocks mainloop until buffer is free.
+				// But SCVA doesn't have interrupts, it handle MIDI output after mainloop, but mainloop was blocking wait for buffer free, so buffer never can be free when it's full. finally cause softlock.
+				// What suck code! Why Roland dose not use coroutine to simulate interrupts?
+				int newLength = 65535;
+				Pointer ptr = new Pointer(Pointer.nativeValue(tgModule.getPointer().getPointer(version.getEventBufferQueueVariable())) + 192 * 2);
+				Native.free(ptr.getLong(0L));
+				ptr.setLong(0, Native.malloc(newLength * Integer.BYTES));
+				ptr.setShort(12, (short) newLength);
+				receiver = openMidiOutDevice(sc, midiOutDevice, midiOut);
 			} else {
 				System.out.println("MIDI output require supported SCCore version!");
 			}
 		}
 		
-		if (frame != null)
-			EventQueue.invokeLater(frame::open);
+		if (gui != null)
+			EventQueue.invokeLater(gui::open);
 		
 		if (sequencerA != null)
 			sequencerA.start();
@@ -218,10 +243,14 @@ public class Main {
 		long stopTime = -1;
 		long frames = 0;
 		int readerIndex = 0;
+		long nextMidiTransmitTime = 0L;
+		long currentTime;
 		for (;;) {
+			currentTime = System.currentTimeMillis();
+			Arrays.fill(out, 0f);
 			sc.process(out);
-			if (frame != null)
-				frame.process(out);
+			if (gui != null)
+				gui.process(out);
 			frames += blockSize;
 			toByteArray(out, byteArray);
 			line.write(byteArray, 0, byteArray.length);
@@ -233,12 +262,12 @@ public class Main {
 				file.write(byteArray2);
 			}
 			if (version != null) {
-				if (receiver != null) {
+				if (receiver != null && (currentTime >= nextMidiTransmitTime || midiTxNoDelay)) {
 					Pointer ptr = new Pointer(Pointer.nativeValue(tgModule.getPointer().getPointer(version.getEventBufferQueueVariable())) + 192 * 2);
 					int writerIndex = ptr.getShort(10) & 0xFFFF;
 					int length      = ptr.getShort(12) & 0xFFFF;
-					if (readerIndex != writerIndex) {
-						int result = ptr.getPointer(0).getInt(readerIndex++ * 4);
+					while (readerIndex != writerIndex) {
+						int result = ptr.getPointer(0).getInt(readerIndex++ * Integer.BYTES);
 						if (readerIndex == length)
 							readerIndex = 0;
 						if ((result & 0xFF) != 0) {
@@ -249,6 +278,14 @@ public class Main {
 								} else {
 									receiver.send(new ShortMessage(decodedMessage[0] & 0xFF, decodedMessage[1] & 0xFF, decodedMessage.length > 2 ? decodedMessage[2] & 0xFF : 0), 0L);
 								}
+								if (midiTxNoDelay)
+									continue;
+								// Add a little delay because Java's built-in MIDI system have really bad implementation.
+								// It will hang up program or stop working when large amount data transmit.
+								// For currently, It emulates MIDI connection baud rate (3.125kbps)
+								// Although transmit speed has been limited to 3125 bytes per second, it still faster than real machine
+								nextMidiTransmitTime = currentTime + (decodedMessage.length * 1000) / 3125;
+								break;
 							}
 						}
 					}
@@ -274,6 +311,8 @@ public class Main {
 			}
 			if (stopTime > 0 && System.currentTimeMillis() > stopTime)
 				break;
+			if (gui != null && !gui.isDisplayable())
+				break;
 		}
 		if (sequencerA != null)
 			sequencerA.close();
@@ -290,6 +329,22 @@ public class Main {
 			file.seek(40L);
 			file.writeInt(Integer.reverseBytes((int) (frames << 3)));
 			file.close();
+		}
+		for (int i = 0, len = midiInDevice.length; i < len; i++) {
+			Info info = midiInDevice[i];
+			try {
+				MidiSystem.getMidiDevice(info).close();
+			} catch (MidiUnavailableException e) {
+				e.printStackTrace();
+			}
+		}
+		for (int i = 0, len = midiOutDevice.length; i < len; i++) {
+			Info info = midiOutDevice[i];
+			try {
+				MidiSystem.getMidiDevice(info).close();
+			} catch (MidiUnavailableException e) {
+				e.printStackTrace();
+			}
 		}
 	}
 
@@ -311,8 +366,8 @@ public class Main {
 		return 0;
 	}
 
-	private static Sequencer openMidiDeviceOrMidiFile(SoundCanvas sc, Info[] midiInDevice, String name, int portNo) {
-		if (name.toLowerCase().endsWith(".mid")) {
+	private static Sequencer openMidiInDeviceOrMidiFile(SoundCanvas sc, Info[] midiInDevice, String name, int portNo) {
+		if (name != null && name.toLowerCase().endsWith(".mid")) {
 			try { // Since Java default sequencer cannot support 2 ports, we need split into 2 midi files.
 				Sequence sequence = MidiSystem.getSequence(new File(name));
 				Sequencer sequencer = MidiSystem.getSequencer(false);
@@ -323,13 +378,31 @@ public class Main {
 			} catch (InvalidMidiDataException | IOException | MidiUnavailableException e) {
 				e.printStackTrace();
 			}
-		} else openMidiDevice(sc, midiInDevice, name, portNo);
+		} else openMidiInDevice(sc, midiInDevice, name, portNo);
 		return null;
 	}
 
-	private static void openMidiDevice(SoundCanvas sc, Info[] midiInDevice, String name, int portNo) {
+	private static void openMidiInDevice(SoundCanvas sc, Info[] midiInDevice, String name, int portNo) {
+		if (name == null) {
+			if (TeVirtualMIDIWrap.isSupported()) {
+				try {
+					createInport(sc, name, portNo);
+				} catch (Throwable t) {
+					t.printStackTrace();
+				}
+			}
+			return;
+		}
 		Info info = findMidiDevice(midiInDevice, name);
 		if (info == null) {
+			if (TeVirtualMIDIWrap.isSupported()) {
+				try {
+					createInport(sc, name, portNo);
+					return;
+				} catch (Throwable t) {
+					t.printStackTrace();
+				}
+			}
 			System.err.printf("No such device: %s\n", name);
 			return;
 		}
@@ -343,6 +416,102 @@ public class Main {
 			System.err.printf("Unable open midi device %c: %s\n", 'A' + portNo, info.getName());
 			e.printStackTrace();
 		}
+	}
+	
+	private static Receiver openMidiOutDevice(SoundCanvas sc, Info[] midiOutDevice, String name) {
+		if (name == null) {
+			if (TeVirtualMIDIWrap.isSupported()) {
+				try {
+					return createOutport(sc, name);
+				} catch (Throwable t) {
+					t.printStackTrace();
+				}
+			}
+		}
+		Info info = findMidiDevice(midiOutDevice, name);
+		if (info == null) {
+			if (TeVirtualMIDIWrap.isSupported()) {
+				try {
+					return createOutport(sc, name);
+				} catch (Throwable t) {
+					t.printStackTrace();
+				}
+			}
+			System.err.printf("No such device: %s\n", name);
+			return null;
+		}
+		System.out.printf("Open midi out device: %s\n", info.getName());
+		MidiDevice midiDevice;
+		try {
+			midiDevice = MidiSystem.getMidiDevice(info);
+			midiDevice.open();
+			return midiDevice.getReceiver();
+		} catch (MidiUnavailableException e) {
+			System.err.printf("Unable open midi out device: %s\n", info.getName());
+			e.printStackTrace();
+		}
+		return null;
+	}
+
+	private static void createInport(SoundCanvas sc, String name, int portNo) {
+		if (portIndex == -1 && name == null)
+			portIndex = ensurePortIndex();
+		if (name == null)
+			name = String.format("%s PART %c", getPortName(portIndex), 'A' + portNo);
+		TeVirtualMIDIWrap virtualMidiPort = TeVirtualMIDIWrap.createVirtualMidiPort(name, 5);
+		Thread thread = new Thread(() -> {
+			while (true) {
+				byte[] command = virtualMidiPort.getCommand();
+				sc.postMidi(portNo, command);
+			}
+		});
+		thread.setDaemon(true);
+		thread.start();
+	}
+	
+	private static Receiver createOutport(SoundCanvas sc, String name) {
+		if (portIndex == -1 && name == null)
+			portIndex = ensurePortIndex();
+		if (name == null)
+			name = getPortName(portIndex);
+		TeVirtualMIDIWrap virtualMidiPort = TeVirtualMIDIWrap.createVirtualMidiPort(name, 9);
+		midiTxNoDelay = true;
+		return virtualMidiPort;
+	}
+
+	private static String getPortName(int portIndex) {
+		return portIndex <= 1 ? DEFAULT_PORT_NAME : portIndex + "- " + DEFAULT_PORT_NAME;
+	}
+
+	private static int ensurePortIndex() {
+		// How did we reach this???
+		assert TeVirtualMIDIWrap.isSupported();
+		int portIndex = 1;
+		TeVirtualMIDIWrap in1, in2, out;
+		do {
+			String portName = getPortName(portIndex);
+			in1 = in2 = out = null;
+			try {
+				in1 = TeVirtualMIDIWrap.createVirtualMidiPort(portName + " PART A", 5);
+				in2 = TeVirtualMIDIWrap.createVirtualMidiPort(portName + " PART B", 5);
+				out = TeVirtualMIDIWrap.createVirtualMidiPort(portName, 9);
+			} catch (RuntimeException e) {
+				if ("The name for the MIDI-port you specified is already in use!".equals(e.getMessage())) {
+					portIndex++;
+					continue;
+				}
+				throw e;
+			} finally {
+				if (in1 != null)
+					in1.close();
+				if (in2 != null)
+					in2.close();
+				if (out != null)
+					out.close();
+			}
+			break;
+		} while (true);
+		return portIndex;
 	}
 
 	private static Info findMidiDevice(Info[] midiDevice, String name) {
@@ -394,5 +563,4 @@ public class Main {
 		}
 		return devices.toArray(new Info[0]);
 	}
-
 }
