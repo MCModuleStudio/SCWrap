@@ -1,4 +1,4 @@
-package org.mcmodule.scwrap;
+package org.mcmodule.scwrap.util;
 
 public class PacketEncoder {
 	public static int encodeShortMessage(int cableNumber, int midiData) {

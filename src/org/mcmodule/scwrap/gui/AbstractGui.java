@@ -1,9 +1,12 @@
-package org.mcmodule.scwrap;
+package org.mcmodule.scwrap.gui;
 
 import java.util.Arrays;
 
 import javax.imageio.ImageIO;
 import javax.swing.JFrame;
+
+import org.mcmodule.scwrap.SoundCanvas;
+import org.mcmodule.scwrap.util.SCCoreVersion;
 
 import com.sun.jna.Function;
 import com.sun.jna.Pointer;
@@ -180,10 +183,6 @@ public abstract class AbstractGui extends JFrame {
 		return PARTS[partNo];
 	}
 	
-	void open() {
-		this.setVisible(true);
-	}
-
 	static {
 		ImageIO.setUseCache(false);
 	}

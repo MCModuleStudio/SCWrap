@@ -13,6 +13,9 @@ import java.util.StringJoiner;
 import javax.sound.midi.MidiMessage;
 import javax.sound.midi.Receiver;
 
+import org.mcmodule.scwrap.util.ByteRingBuffer;
+import org.mcmodule.scwrap.util.PacketEncoder;
+
 import com.sun.jna.Memory;
 import com.sun.jna.Native;
 

@@ -1,4 +1,4 @@
-package org.mcmodule.scwrap;
+package org.mcmodule.scwrap.gui;
 
 import java.awt.BorderLayout;
 import java.awt.Canvas;
@@ -18,6 +18,12 @@ import java.nio.charset.StandardCharsets;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
+
+import org.mcmodule.scwrap.SoundCanvas;
+import org.mcmodule.scwrap.gui.AbstractGui.Button;
+import org.mcmodule.scwrap.gui.AbstractGui.Map;
+import org.mcmodule.scwrap.util.PacketDecoder;
+import org.mcmodule.scwrap.util.SCCoreVersion;
 
 import com.sun.jna.platform.win32.WinDef.HMODULE;
 
@@ -423,6 +429,7 @@ public class SYXG50Gui extends AbstractGui {
 			super.addNotify();
 			this.createBufferStrategy(2);
 			this.renderThread = new Thread(this);
+			this.renderThread.setName("Gui Thread");
 			this.renderThread.start();
 		}
 		

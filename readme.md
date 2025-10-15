@@ -11,6 +11,7 @@ SCWrap wraps Roland's SCCore.dll from the Sound Canvas VA plugin. It restores su
   -p, --midiOut           <port name>   Set MIDI output
   -o, --output            <file name>   Set audio output file
   -m, --map                <map type>   Set map type
+  -i, --inst              <instances>   Set instance number
       --gui                             Open gui
 ```
 

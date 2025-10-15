@@ -9,18 +9,23 @@ import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import javax.sound.midi.InvalidMidiDataException;
 import javax.sound.midi.MidiDevice;
 import javax.sound.midi.MidiDevice.Info;
 import javax.sound.midi.MidiSystem;
 import javax.sound.midi.MidiUnavailableException;
 import javax.sound.midi.Receiver;
-import javax.sound.midi.Sequence;
-import javax.sound.midi.Sequencer;
 import javax.sound.midi.ShortMessage;
 import javax.sound.midi.SysexMessage;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioFormat.Encoding;
+
+import org.mcmodule.scwrap.gui.AbstractGui;
+import org.mcmodule.scwrap.gui.SYXG50Gui;
+import org.mcmodule.scwrap.player.MidiPlayer;
+import org.mcmodule.scwrap.util.PacketDecoder;
+import org.mcmodule.scwrap.util.SCCoreVersion;
+import org.mcmodule.scwrap.util.TeVirtualMIDIWrap;
+
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.SourceDataLine;
 
@@ -36,6 +41,19 @@ public class Main {
 	private static boolean midiTxNoDelay = false;
 	
 	public static void main(String[] args) {
+		// IDK How it works, but seems can improve timing in Windows
+		Thread thread = new Thread() {
+			@Override
+			public void run() {
+				try {
+					for(;;) Thread.sleep(Integer.MAX_VALUE);
+				} catch (Throwable t) {
+				}
+			}
+		};
+		thread.setName("Sleep Thread");
+		thread.setDaemon(true);
+		thread.start();
 		try {
 			main0(args);
 		} catch (Throwable e) {
@@ -121,7 +139,7 @@ public class Main {
 					System.out.println("  -p, --midiOut           <port name>   Set MIDI output");
 					System.out.println("  -o, --output            <file name>   Set audio output file");
 					System.out.println("  -m, --map                <map type>   Set map type");
-					System.out.println("  -i, --inst              <instances>   Set instance nummber");
+					System.out.println("  -i, --inst              <instances>   Set instance number");
 					System.out.println("      --gui                             Open gui");
 					return;
 				case "--gui":
@@ -202,7 +220,7 @@ public class Main {
 			Info info = midiOutDevice[i];
 			System.out.printf("%d. %s\n", i, info);
 		}
-		Sequencer sequencerA = null, sequencerB = null;
+		MidiPlayer sequencerA = null, sequencerB = null;
 		Receiver receiver = null;
 		sequencerA = openMidiInDeviceOrMidiFile(sc, midiInDevice, midiA, 0);
 		
@@ -227,7 +245,7 @@ public class Main {
 		}
 		
 		if (gui != null)
-			EventQueue.invokeLater(gui::open);
+			EventQueue.invokeLater(() -> gui.setVisible(true));
 		
 		if (sequencerA != null)
 			sequencerA.start();
@@ -245,6 +263,9 @@ public class Main {
 		int readerIndex = 0;
 		long nextMidiTransmitTime = 0L;
 		long currentTime;
+		long elapsedMicros = 0L;
+		for (int i = 0; i < 1000; i++) // Wait RTOS boot and make JIT works
+			sc.process(out);
 		for (;;) {
 			currentTime = System.currentTimeMillis();
 			Arrays.fill(out, 0f);
@@ -292,11 +313,16 @@ public class Main {
 				}
 			}
 			if (sequencerA != null || sequencerB != null) {
+				elapsedMicros += (blockSize * 1000000L) / sampleRate;
 				boolean playing = false;
-				if (sequencerA != null)
-					playing |=  sequencerA.isRunning();
-				if (sequencerB != null)
-					playing |=  sequencerB.isRunning();
+				if (sequencerA != null) {
+					sequencerA.loop(elapsedMicros);
+					playing |=  sequencerA.isPlaying();
+				}
+				if (sequencerB != null) {
+					sequencerB.loop(elapsedMicros);
+					playing |=  sequencerB.isPlaying();
+				}
 				if (!playing && stopTime < 0)
 					stopTime = System.currentTimeMillis() + 10000L; // Stop after 10 seconds;
 			} else {
@@ -319,6 +345,9 @@ public class Main {
 		
 		if (sequencerB != null)
 			sequencerB.close();
+		
+		if (gui != null)
+			gui.dispose();
 		
 		line.close();
 		
@@ -366,16 +395,11 @@ public class Main {
 		return 0;
 	}
 
-	private static Sequencer openMidiInDeviceOrMidiFile(SoundCanvas sc, Info[] midiInDevice, String name, int portNo) {
+	private static MidiPlayer openMidiInDeviceOrMidiFile(SoundCanvas sc, Info[] midiInDevice, String name, int portNo) {
 		if (name != null && name.toLowerCase().endsWith(".mid")) {
-			try { // Since Java default sequencer cannot support 2 ports, we need split into 2 midi files.
-				Sequence sequence = MidiSystem.getSequence(new File(name));
-				Sequencer sequencer = MidiSystem.getSequencer(false);
-				sequencer.open();
-				sequencer.setSequence(sequence);
-				sequencer.getTransmitter().setReceiver(sc.createReceiver(portNo));
-				return sequencer;
-			} catch (InvalidMidiDataException | IOException | MidiUnavailableException e) {
+			try {
+				return new MidiPlayer(new File(name), sc, portNo);
+			} catch (IOException e) {
 				e.printStackTrace();
 			}
 		} else openMidiInDevice(sc, midiInDevice, name, portNo);
@@ -465,6 +489,7 @@ public class Main {
 				sc.postMidi(portNo, command);
 			}
 		});
+		thread.setName("MIDI Input Thread");
 		thread.setDaemon(true);
 		thread.start();
 	}

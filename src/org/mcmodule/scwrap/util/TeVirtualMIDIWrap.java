@@ -1,4 +1,4 @@
-package org.mcmodule.scwrap;
+package org.mcmodule.scwrap.util;
 
 import java.io.File;
 import java.lang.reflect.Constructor;
