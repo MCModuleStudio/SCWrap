@@ -20,8 +20,6 @@ import javax.imageio.ImageIO;
 import javax.swing.*;
 
 import org.mcmodule.scwrap.SoundCanvas;
-import org.mcmodule.scwrap.gui.AbstractGui.Button;
-import org.mcmodule.scwrap.gui.AbstractGui.Map;
 import org.mcmodule.scwrap.util.PacketDecoder;
 import org.mcmodule.scwrap.util.SCCoreVersion;
 
@@ -31,7 +29,7 @@ public class SYXG50Gui extends AbstractGui {
 	
 	private static final long serialVersionUID = 2833432997690576654L;
 	
-	private final PacketDecoder packetDecoder = new PacketDecoder();
+	private final PacketDecoder[] packetDecoder = new PacketDecoder[6];
 	private final int[] levels = new int[32];
 	private final int[] voices = new int[32];
 	private int partALevel;
@@ -53,6 +51,10 @@ public class SYXG50Gui extends AbstractGui {
 		setLocationByPlatform(true);
 		setResizable(false);
 		setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+		PacketDecoder[] packetDecoder = this.packetDecoder;
+		for (int i = 0, len = packetDecoder.length; i < len; i++) {
+			packetDecoder[i] = new PacketDecoder();
+		}
 	}
 
 	@Override
@@ -109,8 +111,8 @@ public class SYXG50Gui extends AbstractGui {
 					System.out.println(error);
 				}
 			} else {
-				this.packetDecoder.decodeMessage(result);
-//				byte[] decodedMessage = this.packetDecoder.decodeMessage(result);
+				this.packetDecoder[2].decodeMessage(result);
+//				byte[] decodedMessage = this.packetDecoder[2].decodeMessage(result);
 //				if (decodedMessage != null) {
 //					System.out.println("TX: " + SoundCanvas.toHex(decodedMessage, decodedMessage.length));
 //				}

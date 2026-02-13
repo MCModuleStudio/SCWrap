@@ -21,13 +21,24 @@ import com.sun.jna.Native;
 
 public class SoundCanvas {
 	
-	protected final ByteRingBuffer[] uartBuffer;
+	private static final byte[][] RESET_MESSAGES = {
+			"\360\103\020\114\000\000\176\000\367".getBytes(StandardCharsets.ISO_8859_1), // XG System ON
+			"\360\101\020\102\022\000\000\177\000\001\367".getBytes(StandardCharsets.ISO_8859_1), // System Mode Set
+			"\360\101\020\102\022\100\000\177\000\101\367".getBytes(StandardCharsets.ISO_8859_1), // GS Reset
+			"\360\176\177\011\001\367".getBytes(StandardCharsets.ISO_8859_1), // GM1 System ON
+			"\360\176\177\011\002\367".getBytes(StandardCharsets.ISO_8859_1), // GM1 System OFF
+			"\360\176\177\011\003\367".getBytes(StandardCharsets.ISO_8859_1), // GM2 System ON
+	};
+	
+	protected final ByteRingBuffer[] midiBuffer;
 	protected final TG tg;
 	protected float sampleRate;
 	protected int bufferSize;
 	
 	private Memory bufferL, bufferR;
 	private byte[] sysexBuffer = new byte[4096], singleByte = new byte[1];
+
+	public int maxMidiProcess = 100;
 	
 	public SoundCanvas(String libraryPath, float sampleRate, int bufferSize) {
 		this(patchAndLoadLibrary(libraryPath), sampleRate, bufferSize);
@@ -39,9 +50,9 @@ public class SoundCanvas {
 		this.bufferSize = bufferSize;
 		tg.TG_initialize(0);
 		activate();
-		ByteRingBuffer[] uartBuffer = this.uartBuffer = new ByteRingBuffer[2];
-		for (int i = 0, len = uartBuffer.length; i < len; i++) {
-			uartBuffer[i] = new ByteRingBuffer(65536);
+		ByteRingBuffer[] midiBuffer = this.midiBuffer = new ByteRingBuffer[2];
+		for (int i = 0, len = midiBuffer.length; i < len; i++) {
+			midiBuffer[i] = new ByteRingBuffer(65536);
 		}
 	}
 	
@@ -49,14 +60,14 @@ public class SoundCanvas {
 		this.tg = null;
 		this.sampleRate = sampleRate;
 		this.bufferSize = bufferSize;
-		ByteRingBuffer[] uartBuffer = this.uartBuffer = new ByteRingBuffer[2];
-		for (int i = 0, len = uartBuffer.length; i < len; i++) {
-			uartBuffer[i] = new ByteRingBuffer(65536);
+		ByteRingBuffer[] midiBuffer = this.midiBuffer = new ByteRingBuffer[2];
+		for (int i = 0, len = midiBuffer.length; i < len; i++) {
+			midiBuffer[i] = new ByteRingBuffer(65536);
 		}
 	}
 	
 	public Receiver createReceiver(int port) {
-		ByteRingBuffer buffer = this.uartBuffer[port];
+		ByteRingBuffer buffer = this.midiBuffer[port];
 		
 		return new Receiver() {
 
@@ -78,7 +89,7 @@ public class SoundCanvas {
 	
 	public boolean postMidi(int portNo, int data) {
 		int len = getDataLen(data & 0xFF) + 1;
-		ByteRingBuffer buffer = this.uartBuffer[portNo];
+		ByteRingBuffer buffer = this.midiBuffer[portNo];
 		synchronized (this) {
 			for (int i = 0; i < len; i++) {
 				if (!buffer.offer((byte) ((data >> (i << 3)) & 0xFF))) {
@@ -92,7 +103,7 @@ public class SoundCanvas {
 	
 	public boolean postMidi(int portNo, byte[] data) {
 		int len = data.length;
-		ByteRingBuffer buffer = this.uartBuffer[portNo];
+		ByteRingBuffer buffer = this.midiBuffer[portNo];
 		synchronized (this) {
 			for (int i = 0; i < len; i++) {
 				if (!buffer.offer(data[i])) {
@@ -105,7 +116,7 @@ public class SoundCanvas {
 	}
 
 	public boolean postMidi(int portNo, byte data) {
-		ByteRingBuffer buffer = this.uartBuffer[portNo];
+		ByteRingBuffer buffer = this.midiBuffer[portNo];
 		boolean success = buffer.offer(data);
 		if (!success) {
 			notifyBufferFull(portNo);
@@ -155,12 +166,12 @@ public class SoundCanvas {
 
 	public boolean flushMidi() {
 		synchronized (this) {
+			int maxMidiProcess = this.maxMidiProcess;
 			loop:
 			for (int i = 0; i < 2; i++) {
-				ByteRingBuffer buffer = this.uartBuffer[i];
+				ByteRingBuffer buffer = this.midiBuffer[i];
 				if (buffer.isEmpty()) continue;
 				try {
-					int maxMidiProcess = 200;
 					do {
 						int statusByte = pollBuffer(buffer);
 						if (statusByte == 0xF0) {
@@ -172,14 +183,16 @@ public class SoundCanvas {
 								sysexBuffer[j++] = (byte) statusByte;
 							} while (statusByte != 0xF7);
 							handleLongMessage(i, sysexBuffer, j);
+							maxMidiProcess -= (j + 2) / 3;
 						} else {
 							int len = getDataLen(statusByte);
 							int msg = statusByte;
 							for (int j = 1; j <= len; j++)
 								msg |= pollBuffer(buffer) << (j << 3);
 							handleShortMessage(i, msg);
+							maxMidiProcess--;
 						}
-					} while(!buffer.isEmpty() && maxMidiProcess-- > 0);
+					} while(!buffer.isEmpty() && maxMidiProcess > 0);
 					continue loop;
 				} catch (RuntimeException e) {
 					e.printStackTrace();
@@ -189,7 +202,7 @@ public class SoundCanvas {
 			if (this.tg != null)
 				this.tg.TG_flushMidi();
 			
-			return !(this.uartBuffer[0].isEmpty() || this.uartBuffer[1].isEmpty());
+			return !(this.midiBuffer[0].isEmpty() || this.midiBuffer[1].isEmpty());
 		}
 	}
 	
@@ -297,7 +310,23 @@ public class SoundCanvas {
 		if (index < 0 || index + length > arrlen) throw new ArrayIndexOutOfBoundsException();
 	}
 	
-	protected static String toHex(byte[] data, int len) {
+	public static boolean isResetMessage(byte[] msg, int len) {
+		loop:
+		for (int i = 0; i < RESET_MESSAGES.length; i++) {
+			byte[] resetMessage = RESET_MESSAGES[i];
+			if (len == resetMessage.length) {
+				for (int j = 0; j < len; j++) {
+					if (msg[j] != resetMessage[j]) {
+						continue loop;
+					}
+				}
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	public static String toHex(byte[] data, int len) {
 		StringJoiner sj = new StringJoiner(" ");
 		for (int i = 0; i < len; i++) {
 			int b = data[i] & 0xFF;

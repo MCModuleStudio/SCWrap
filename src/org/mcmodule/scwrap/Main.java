@@ -19,8 +19,7 @@ import javax.sound.midi.SysexMessage;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioFormat.Encoding;
 
-import org.mcmodule.scwrap.gui.AbstractGui;
-import org.mcmodule.scwrap.gui.SYXG50Gui;
+import org.mcmodule.scwrap.gui.*;
 import org.mcmodule.scwrap.player.MidiPlayer;
 import org.mcmodule.scwrap.util.PacketDecoder;
 import org.mcmodule.scwrap.util.SCCoreVersion;
@@ -70,7 +69,7 @@ public class Main {
 		String midiA = null, midiB = null, midiOut = null;
 		String output = null;
 		int map = 4;
-		boolean guiEnabled = false;
+		boolean guiEnabled = false, rendererOnly = false;
 		int instances = 1;
 
 		for (int i = 0; i < args.length; i++) {
@@ -141,9 +140,13 @@ public class Main {
 					System.out.println("  -m, --map                <map type>   Set map type");
 					System.out.println("  -i, --inst              <instances>   Set instance number");
 					System.out.println("      --gui                             Open gui");
+					System.out.println("      --rendererOnly                    Do not output audio");
 					return;
 				case "--gui":
 					guiEnabled = true;
+					break;
+				case "--rendererOnly":
+					rendererOnly = true;
 					break;
 				default:
 					System.err.println("Unknown option: " + args[i]);
@@ -171,7 +174,7 @@ public class Main {
 //						| UnsupportedLookAndFeelException e) {
 //					e.printStackTrace();
 //				}
-				frame = new SYXG50Gui(sc, tgModule, version);
+				frame = new SC88ProGui(sc, tgModule, version);
 			} else {
 				System.out.println("Gui require supported SCCore version!");
 			}
@@ -183,9 +186,12 @@ public class Main {
 		}
 		
 		AudioFormat format = new AudioFormat(Encoding.PCM_SIGNED, sampleRate, 16, 2, 4, sampleRate, true);
-		SourceDataLine line = AudioSystem.getSourceDataLine(format);
-		line.open(format, 4096);
-		line.start();
+		SourceDataLine line = null;
+		if (!rendererOnly) {
+			line = AudioSystem.getSourceDataLine(format);
+			line.open(format, 4096);
+			line.start();
+		}
 		
 		RandomAccessFile file = null;
 		if (output != null) {
@@ -226,18 +232,22 @@ public class Main {
 		
 		sequencerB = openMidiInDeviceOrMidiFile(sc, midiInDevice, midiB, 1);
 		
-		if ((midiOut != null) || (midiA == null && midiB == null && version != null) && instances <= 1) {
+		if (version != null && version != SCCoreVersion.Y2015_REV1_64BIT && instances <= 1) {
+			// FIXME: This cause crash when using SCCore 2015
+			// Fix bulk dump cause softlock
+			// This is a temporary fix. It's better to move MIDI output to other thread.
+			// Because SC-8820 uses interrupt to handle MIDI output. When buffer full, SC-8820 blocks mainloop until buffer is free.
+			// But SCVA doesn't have interrupts, it handle MIDI output after mainloop, but mainloop was blocking wait for buffer free, so buffer never can be free when it's full. finally cause softlock.
+			// What suck code! Why Roland dose not use coroutine to simulate interrupts?
+			int newLength = 65535;
+			Pointer ptr = new Pointer(Pointer.nativeValue(tgModule.getPointer().getPointer(version.getEventBufferQueueVariable())) + 192 * 2);
+			Native.free(ptr.getLong(0L));
+			ptr.setLong(0, Native.malloc(newLength * Integer.BYTES));
+			ptr.setShort(12, (short) newLength);
+		}
+		
+		if ((midiOut != null) || (midiA == null && midiB == null && version != null && version != SCCoreVersion.Y2015_REV1_64BIT) && instances <= 1) {
 			if (version != null) {
-				// Fix bulk dump cause softlock
-				// This is a temporary fix. It's better to move MIDI output to other thread.
-				// Because SC-8820 uses interrupt to handle MIDI output. When buffer full, SC-8820 blocks mainloop until buffer is free.
-				// But SCVA doesn't have interrupts, it handle MIDI output after mainloop, but mainloop was blocking wait for buffer free, so buffer never can be free when it's full. finally cause softlock.
-				// What suck code! Why Roland dose not use coroutine to simulate interrupts?
-				int newLength = 65535;
-				Pointer ptr = new Pointer(Pointer.nativeValue(tgModule.getPointer().getPointer(version.getEventBufferQueueVariable())) + 192 * 2);
-				Native.free(ptr.getLong(0L));
-				ptr.setLong(0, Native.malloc(newLength * Integer.BYTES));
-				ptr.setShort(12, (short) newLength);
 				receiver = openMidiOutDevice(sc, midiOutDevice, midiOut);
 			} else {
 				System.out.println("MIDI output require supported SCCore version!");
@@ -274,7 +284,8 @@ public class Main {
 				gui.process(out);
 			frames += blockSize;
 			toByteArray(out, byteArray);
-			line.write(byteArray, 0, byteArray.length);
+			if (line != null)
+				line.write(byteArray, 0, byteArray.length);
 			if (file != null) {
 				byteBuffer.clear();
 				for (int i = 0, len = out.length; i < len; i++) {
@@ -282,6 +293,7 @@ public class Main {
 				}
 				file.write(byteArray2);
 			}
+			elapsedMicros += (blockSize * 1000000L) / sampleRate;
 			if (version != null) {
 				if (receiver != null && (currentTime >= nextMidiTransmitTime || midiTxNoDelay)) {
 					Pointer ptr = new Pointer(Pointer.nativeValue(tgModule.getPointer().getPointer(version.getEventBufferQueueVariable())) + 192 * 2);
@@ -313,7 +325,6 @@ public class Main {
 				}
 			}
 			if (sequencerA != null || sequencerB != null) {
-				elapsedMicros += (blockSize * 1000000L) / sampleRate;
 				boolean playing = false;
 				if (sequencerA != null) {
 					sequencerA.loop(elapsedMicros);
@@ -324,7 +335,7 @@ public class Main {
 					playing |=  sequencerB.isPlaying();
 				}
 				if (!playing && stopTime < 0)
-					stopTime = System.currentTimeMillis() + 10000L; // Stop after 10 seconds;
+					stopTime = elapsedMicros + 10000000L; // Stop after 10 seconds;
 			} else {
 				if (file != null) {
 					long filePointer = file.getFilePointer();
@@ -335,7 +346,7 @@ public class Main {
 					file.seek(filePointer);
 				}
 			}
-			if (stopTime > 0 && System.currentTimeMillis() > stopTime)
+			if (stopTime > 0 && elapsedMicros > stopTime)
 				break;
 			if (gui != null && !gui.isDisplayable())
 				break;
@@ -349,7 +360,8 @@ public class Main {
 		if (gui != null)
 			gui.dispose();
 		
-		line.close();
+		if (line != null)
+			line.close();
 		
 		if (file != null) {
 			long filePointer = file.getFilePointer();
@@ -398,6 +410,7 @@ public class Main {
 	private static MidiPlayer openMidiInDeviceOrMidiFile(SoundCanvas sc, Info[] midiInDevice, String name, int portNo) {
 		if (name != null && name.toLowerCase().endsWith(".mid")) {
 			try {
+				sc.maxMidiProcess = 12;
 				return new MidiPlayer(new File(name), sc, portNo);
 			} catch (IOException e) {
 				e.printStackTrace();

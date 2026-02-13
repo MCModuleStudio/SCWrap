@@ -23,8 +23,11 @@ public abstract class AbstractGui extends JFrame {
 	protected final SCCoreVersion version;
 	
 	private Function getPortLevel;
-	private Pointer blockBase;
-	private int[] readerIndex = new int[4];
+	protected Pointer blockBase;
+	protected Pointer patchBase;
+	protected Pointer setupBase;
+	protected Pointer systemBase;
+	private int[] readerIndex = new int[6];
 
 	public AbstractGui(SoundCanvas sc, HMODULE tgModule, SCCoreVersion version) {
 		this.sc = sc;
@@ -32,6 +35,9 @@ public abstract class AbstractGui extends JFrame {
 		this.version = version;
 		this.getPortLevel = Function.getFunction(new Pointer(Pointer.nativeValue(tgModule.getPointer()) + version.getGetPortLevelFunction()));
 		this.blockBase = tgModule.getPointer().getPointer(version.getBlockBaseVariable());
+		this.patchBase = new Pointer(Pointer.nativeValue(tgModule.getPointer()) + version.getPatchVariable());
+		this.setupBase = new Pointer(Pointer.nativeValue(tgModule.getPointer()) + version.getSetupVariable());
+		this.systemBase = new Pointer(Pointer.nativeValue(tgModule.getPointer()) + version.getSystemVariable());
 		Arrays.fill(this.readerIndex, 0);
 	}
 	
@@ -95,7 +101,8 @@ public abstract class AbstractGui extends JFrame {
 			j = 1;
 		}
 
-		return i * 4 - j; // Guesswork
+//		return i * 4 - j; // Guesswork
+		return i * 4 + (4 - j) - 2;
 //		return level >> 11;
 	}
 	
@@ -104,40 +111,45 @@ public abstract class AbstractGui extends JFrame {
 	}
 	
 	protected int getBlockLevel(int block) {
-		Pointer pointer = new Pointer(Pointer.nativeValue(this.blockBase) + 1160 * block);
-		
+		Pointer listPtr = new Pointer(Pointer.nativeValue(this.blockBase) + 1160 * block + 624).getPointer(0);
+
 		long max = 0L;
-		Pointer list = pointer.getPointer(624);
-		loop:
-		while (list != null) {
-			for (Pointer i = list.getPointer(0); ; i = i.getPointer(264)) {
-				if (i == null) {
-					list = list.getPointer(32);
-					break;
+
+		while (listPtr != null) {
+			Pointer node = listPtr.getPointer(0);
+
+			while (node != null) {
+				long val1 = node.getInt(172) & 0xFFFFFFFFL;
+				long val2 = node.getInt(156) & 0xFFFFFFFFL;
+				long currentVal = (val1 >> 2) * (val2 >> 2);
+
+				if (currentVal >= 0x3FFFFFFF) {
+					return 0x7FFF;
 				}
-				long val = (i.getInt(172) >> 2) * (i.getInt(156) >> 2);
-				if (val >= 0x3FFFFFFF) break loop;
-				if (val > max) {
-					max = val;
+
+				if (currentVal > max) {
+					max = currentVal;
 				}
+
+				node = node.getPointer(264);
 			}
+
+			listPtr = listPtr.getPointer(32);
 		}
-		return (int) (max >>> 15L);
+
+		return (int) (max >>> 15);
 	}
 	
 	protected int getBlockVoiceCount(int block) {
-		Pointer pointer = new Pointer(Pointer.nativeValue(this.blockBase) + 1160 * block);
-		
 		int voices = 0;
-		Pointer list = pointer.getPointer(624);
-		while (list != null) {
-			for (Pointer i = list.getPointer(0); ; i = i.getPointer(264)) {
-				if (i == null) {
-					list = list.getPointer(32);
-					break;
-				}
+		Pointer listPtr = new Pointer(Pointer.nativeValue(this.blockBase) + 1160 * block + 624).getPointer(0);
+		while (listPtr != null) {
+			Pointer node = listPtr.getPointer(0);
+			while (node != null) {
+				node = node.getPointer(264);
 				voices++;
 			}
+			listPtr = listPtr.getPointer(32);
 		}
 		return voices;
 	}
@@ -165,10 +177,14 @@ public abstract class AbstractGui extends JFrame {
 			if (readerIndex == length)
 				readerIndex = 0;
 			this.readerIndex[queue] = readerIndex;
-//			ptr.setShort(8, (short) readerIndex);
+//			ptr.setShort(8, (short)   readerIndex);
 			return result;
 		}
 		return 0;
+	}
+	
+	protected byte getDeviceID() {
+		return this.systemBase.getByte(0x36);
 	}
 	
 	protected Map getMap() {
@@ -176,11 +192,11 @@ public abstract class AbstractGui extends JFrame {
 	}
 	
 	protected static int block2part(int blockNo) {
-		return BLOCKS[blockNo];
+		return BLOCKS[blockNo & 0xF] | (blockNo &~0xF);
 	}
 	
 	protected static int part2block(int partNo) {
-		return PARTS[partNo];
+		return PARTS[partNo & 0xF] | (partNo &~0xF);
 	}
 	
 	static {

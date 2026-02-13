@@ -3,7 +3,6 @@ package org.mcmodule.scwrap;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -16,15 +15,6 @@ import com.sun.jna.platform.win32.Kernel32;
 
 public class MultiInstancedSoundCanvas extends SoundCanvas {
 
-	private static final byte[][] RESET_MESSAGES = {
-			"\360\103\020\114\000\000\176\000\367".getBytes(StandardCharsets.ISO_8859_1),
-			"\360\101\020\102\022\000\000\177\000\001\367".getBytes(StandardCharsets.ISO_8859_1),
-			"\360\101\020\102\022\100\000\177\000\101\367".getBytes(StandardCharsets.ISO_8859_1),
-			"\360\176\177\011\001\367".getBytes(StandardCharsets.ISO_8859_1),
-			"\360\176\177\011\002\367".getBytes(StandardCharsets.ISO_8859_1),
-			"\360\176\177\011\003\367".getBytes(StandardCharsets.ISO_8859_1),
-	};
-	
 	private final SoundCanvas[] instances;
 	private final int instanceCount;
 	private int[][][] noteRefCount;
@@ -79,17 +69,8 @@ public class MultiInstancedSoundCanvas extends SoundCanvas {
 		for (int i = 0; i < this.instanceCount; i++) {
 			instances[i].handleLongMessage(portNo, msg, len);
 		}
-		loop:
-		for (int i = 0; i < RESET_MESSAGES.length; i++) {
-			byte[] resetMessage = RESET_MESSAGES[i];
-			if (len == resetMessage.length) {
-				for (int j = 0; j < len; j++) {
-					if (msg[j] != resetMessage[j]) {
-						continue loop;
-					}
-				}
-				reset();
-			}
+		if (isResetMessage(msg, len)) {
+			reset();
 		}
 	}
 
@@ -138,7 +119,7 @@ public class MultiInstancedSoundCanvas extends SoundCanvas {
 
 	// TODO: Always use inst 0 when Part EFX enabled or is Rhythm part when instanceCount > 32
 	private int lookupInstance(int portNo, int msg) {
-		boolean noteOn = (msg & 0x80) != 0x00;
+		boolean noteOn = (msg & 0x90) == 0x90;
 		int channel = msg & 0xF | (portNo << 4);
 		int key = (msg >>> 8) & 0xFF;
 		int velocity = (msg >>> 16) & 0xFF;

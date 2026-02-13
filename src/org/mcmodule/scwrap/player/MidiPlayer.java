@@ -71,6 +71,7 @@ public class MidiPlayer implements AutoCloseable {
 					}
 					switch (status) {
 						case 0xF0: // System exclusive message
+						case 0xF7: // Raw message
 							byte[] sysex = new byte[stream.readVarInt(data)];
 							stream.readFully(sysex);
 							break;
@@ -141,10 +142,12 @@ public class MidiPlayer implements AutoCloseable {
 				if (data[0] == (byte) 0xFF) {
 					switch (data[1] & 0xFF) {
 					case 0x51: // tempo change
-						long tempo = 0;
-						for (int j = 2; j < data.length; j++)
-							tempo = (tempo << 8) | (data[j] & 0xFF);
-						this.currentTempo = tempo;
+						if (data.length == 5) {
+							long tempo = 0;
+							for (int j = 2; j < data.length; j++)
+								tempo = (tempo << 8) | (data[j] & 0xFF);
+							this.currentTempo = tempo;
+						}
 						break;
 					case 0x21:
 						if (data.length > 2) {
@@ -193,6 +196,11 @@ public class MidiPlayer implements AutoCloseable {
 				dat = new byte[in.readVarInt(data) + 1];
 				dat[0] = (byte) 0xF0;
 				in.readFully(dat, 1, dat.length - 1);
+				break;
+			}
+			case 0xF7: {
+				dat = new byte[in.readVarInt(data)];
+				in.readFully(dat, 0, dat.length);
 				break;
 			}
 			case 0xFF: { // Metadata
