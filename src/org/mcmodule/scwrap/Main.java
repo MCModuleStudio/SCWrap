@@ -38,6 +38,7 @@ public class Main {
 	private static final String DEFAULT_PORT_NAME = "Roland SC-VA";
 	private static int portIndex = -1;
 	private static boolean midiTxNoDelay = false;
+	private static boolean virtualMIDIAllowed = false;
 	
 	public static void main(String[] args) {
 		// IDK How it works, but seems can improve timing in Windows
@@ -226,6 +227,8 @@ public class Main {
 			Info info = midiOutDevice[i];
 			System.out.printf("%d. %s\n", i, info);
 		}
+		virtualMIDIAllowed = (midiA == null && midiB == null) || (midiA != null && midiB != null);
+		@SuppressWarnings("resource")
 		MidiPlayer sequencerA = null, sequencerB = null;
 		Receiver receiver = null;
 		sequencerA = openMidiInDeviceOrMidiFile(sc, midiInDevice, midiA, 0);
@@ -274,6 +277,7 @@ public class Main {
 		long nextMidiTransmitTime = 0L;
 		long currentTime;
 		long elapsedMicros = 0L;
+		long startedTime = System.currentTimeMillis();
 		for (int i = 0; i < 1000; i++) // Wait RTOS boot and make JIT works
 			sc.process(out);
 		for (;;) {
@@ -351,11 +355,22 @@ public class Main {
 			if (gui != null && !gui.isDisplayable())
 				break;
 		}
+		if (rendererOnly) {
+			double used = (System.currentTimeMillis() - startedTime) / 1000.0;
+			double rendered = elapsedMicros / 1000000.0;
+			double speed = (used > 0) ? (rendered / used) : 0;
+			double load = (rendered > 0) ? (used / rendered * 100.0) : 0;
+			System.out.printf("Rendered %.2fs in %.2fs (Speed: %.2fx, Load: %.1f%%)\n", (elapsedMicros / 1000L) / 1000.0, used, speed, load);
+		}
+		
 		if (sequencerA != null)
 			sequencerA.close();
 		
 		if (sequencerB != null)
 			sequencerB.close();
+		
+		sc = null;
+		sequencerA = sequencerB = null;
 		
 		if (gui != null)
 			gui.dispose();
@@ -421,7 +436,7 @@ public class Main {
 
 	private static void openMidiInDevice(SoundCanvas sc, Info[] midiInDevice, String name, int portNo) {
 		if (name == null) {
-			if (TeVirtualMIDIWrap.isSupported()) {
+			if (virtualMIDIAllowed && TeVirtualMIDIWrap.isSupported()) {
 				try {
 					createInport(sc, name, portNo);
 				} catch (Throwable t) {
@@ -432,7 +447,7 @@ public class Main {
 		}
 		Info info = findMidiDevice(midiInDevice, name);
 		if (info == null) {
-			if (TeVirtualMIDIWrap.isSupported()) {
+			if (virtualMIDIAllowed && TeVirtualMIDIWrap.isSupported()) {
 				try {
 					createInport(sc, name, portNo);
 					return;
@@ -457,7 +472,7 @@ public class Main {
 	
 	private static Receiver openMidiOutDevice(SoundCanvas sc, Info[] midiOutDevice, String name) {
 		if (name == null) {
-			if (TeVirtualMIDIWrap.isSupported()) {
+			if (virtualMIDIAllowed && TeVirtualMIDIWrap.isSupported()) {
 				try {
 					return createOutport(sc, name);
 				} catch (Throwable t) {
@@ -467,7 +482,7 @@ public class Main {
 		}
 		Info info = findMidiDevice(midiOutDevice, name);
 		if (info == null) {
-			if (TeVirtualMIDIWrap.isSupported()) {
+			if (virtualMIDIAllowed && TeVirtualMIDIWrap.isSupported()) {
 				try {
 					return createOutport(sc, name);
 				} catch (Throwable t) {
