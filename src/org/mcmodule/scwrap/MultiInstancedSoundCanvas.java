@@ -10,12 +10,16 @@ import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.zip.CRC32;
 
+import org.mcmodule.scwrap.util.PELoader;
+
 import com.sun.jna.Native;
+import com.sun.jna.Pointer;
 import com.sun.jna.platform.win32.Kernel32;
 
 public class MultiInstancedSoundCanvas extends SoundCanvas {
 
 	private final SoundCanvas[] instances;
+	private final Pointer[] modules;
 	private final int instanceCount;
 	private int[][][] noteRefCount;
 	private int index = 0;
@@ -25,21 +29,31 @@ public class MultiInstancedSoundCanvas extends SoundCanvas {
 		assert instances > 1;
 		this.instanceCount = instances;
 		this.instances = new SoundCanvas[instances];
+		this.modules = new Pointer[instances];
 		patchTG(libraryPath.getAbsolutePath());
-		File[] libraries = duplicateLibrary(libraryPath, instances);
-		for (int i = 0; i < instances; i++) {
-			this.instances[i] = new SoundCanvas(Native.load(libraries[i].getAbsolutePath(), TG.class), sampleRate, bufferSize);
-		}
-		if (System.getProperty("os.name", "unknown").toLowerCase().startsWith("win")) {
-			Runtime.getRuntime().addShutdownHook(new Thread() { // Unload library from memory
-				@Override
-				public void run() {
-					Kernel32 kernel32 = Kernel32.INSTANCE;
-					for (int i = 0; i < instances; i++) {
-						kernel32.FreeLibrary(kernel32.GetModuleHandle(libraries[i].getAbsolutePath()));
+		// Use manual map to prevent copy SCCore to temp dir
+		if (System.getProperty("os.name", "unknown").toLowerCase().startsWith("win") && !Boolean.getBoolean(MultiInstancedSoundCanvas.class.getName() + ".useTempFile")) {
+			PELoader loader = new PELoader(libraryPath);
+			for (int i = 0; i < instances; i++) {
+				this.instances[i] = new SoundCanvas(loader.load(TG.class), sampleRate, bufferSize);
+				this.modules[i] = new Pointer(loader.getImageBase());
+			}
+		} else {
+			File[] libraries = duplicateLibrary(libraryPath, instances);
+			for (int i = 0; i < instances; i++) {
+				this.instances[i] = new SoundCanvas(Native.load(libraries[i].getAbsolutePath(), TG.class), sampleRate, bufferSize);
+			}
+			if (System.getProperty("os.name", "unknown").toLowerCase().startsWith("win")) {
+				Runtime.getRuntime().addShutdownHook(new Thread() { // Unload library from memory
+					@Override
+					public void run() {
+						Kernel32 kernel32 = Kernel32.INSTANCE;
+						for (int i = 0; i < instances; i++) {
+							kernel32.FreeLibrary(kernel32.GetModuleHandle(libraries[i].getAbsolutePath()));
+						}
 					}
-				}
-			});
+				});
+			}
 		}
 		this.noteRefCount = new int[instances][32][128];
 		reset();

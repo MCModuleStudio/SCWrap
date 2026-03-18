@@ -360,40 +360,69 @@ public class SoundCanvas {
 	}
 	
 	public static void patchTG(String libraryPath) throws IOException {
+		boolean win = System.getProperty("os.name", "unknown").toLowerCase().startsWith("win");
 		System.out.println("Try to patch SCCore.dll");
 		try (RandomAccessFile file = new RandomAccessFile(libraryPath, "rw")) {
-			System.out.println("Searching for `and al, 0Fh`");
-			byte[] buffer = new byte[(int) file.length()];
-			file.read(buffer);
-			ByteBuffer byteBuffer = ByteBuffer.wrap(buffer).order(ByteOrder.BIG_ENDIAN);
-			for (int i = 0, len = (int) (file.length() - 4); i < len; i++) {
-				int dword = byteBuffer.getInt(i);
-				if (dword == 0x240FBA04 || dword == 0x240F8845 || dword == 0x240F8844) {
-					System.out.printf("Found opcode at 0x%08x\n", i);
-					file.seek(i);
-					System.out.println("Replacing with Nop");
-					file.writeShort(0x9090);
-					System.out.println("Patch completed");
-					return;
-				}
-				if (dword == 0xE00FBA04) {
-					i -= 2;
-					System.out.printf("Found opcode at 0x%08x\n", i);
-					file.seek(i);
-					System.out.println("Replacing with Nop");
-					file.writeInt(0x90909090);
-					System.out.println("Patch completed");
-					return;
-				}
-				if (dword == 0x9090BA04 || dword == 0x90908845 || dword == 0x90908844) {
-					if ((byteBuffer.getShort(i - 2) & 0xFFFF) == 0x9090)
+			if (win) {
+				System.out.println("Searching for `and al, 0Fh`");
+				byte[] buffer = new byte[(int) file.length()];
+				file.read(buffer);
+				ByteBuffer byteBuffer = ByteBuffer.wrap(buffer).order(ByteOrder.BIG_ENDIAN);
+				for (int i = 0, len = (int) (file.length() - 4); i < len; i++) {
+					int dword = byteBuffer.getInt(i);
+					if (dword == 0x240FBA04 || dword == 0x240F8845 || dword == 0x240F8844) {
+						System.out.printf("Found opcode at 0x%08x\n", i);
+						file.seek(i);
+						System.out.println("Replacing with Nop");
+						file.writeShort(0x9090);
+						System.out.println("Patch completed");
+						return;
+					}
+					if (dword == 0xE00FBA04) {
 						i -= 2;
-					System.out.printf("Found patched opcode at 0x%08x\n", i);
+						System.out.printf("Found opcode at 0x%08x\n", i);
+						file.seek(i);
+						System.out.println("Replacing with Nop");
+						file.writeInt(0x90909090);
+						System.out.println("Patch completed");
+						return;
+					}
+					if (dword == 0x9090BA04 || dword == 0x90908845 || dword == 0x90908844) {
+						if ((byteBuffer.getShort(i - 2) & 0xFFFF) == 0x9090)
+							i -= 2;
+						System.out.printf("Found patched opcode at 0x%08x\n", i);
+						System.out.println("Patch completed");
+						return;
+					}
+				}
+				System.out.println("Opcode not found, 2 Parts will not available.");
+			} else {
+				boolean patched = false;
+				System.out.println("Searching for `and edi, FFFFFF0Fh`");
+				byte[] buffer = new byte[(int) file.length()];
+				file.read(buffer);
+				ByteBuffer byteBuffer = ByteBuffer.wrap(buffer).order(ByteOrder.BIG_ENDIAN);
+				for (int i = 0, len = (int) (file.length() - 4); i < len; i++) {
+					int dword = byteBuffer.getInt(i);
+					if (dword == 0x81E70FFF) {
+						System.out.printf("Found opcode at 0x%08x\n", i);
+						file.seek(i);
+						System.out.println("Replacing with `and edi, FFFFFFFFh`");
+						file.writeInt(0x81E7FFFF);
+						patched = true;
+					}
+					if (dword == 0x81E7FFFF) {
+						System.out.printf("Found patched opcode at 0x%08x\n", i);
+						System.out.println("Patch completed");
+						return;
+					}
+				}
+				if (patched) {
 					System.out.println("Patch completed");
-					return;
+				} else {
+					System.out.println("Opcode not found, 2 Parts will not available.");
 				}
 			}
-			System.out.println("Opcode not found, 2 Parts will not available.");
 		}
 	}
 }

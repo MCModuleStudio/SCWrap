@@ -565,6 +565,9 @@ public class SC88ProGui extends AbstractGui {
 					byte[] instruments = rhythm != null ? rhythm.getByteArray(0x500, remaining) : block.getByteArray(0x47c, remaining);
 					for (int i = 0; i < remaining; i++)
 						currentDisplayedString[index++] = (char) (instruments[i] & 0xFF);
+//					if (currentDisplayedString[14] == ':') {
+//						System.out.println(block.getByte(0x24d));
+//					}
 				}
 				this.level = String.valueOf(block.getByte(0x3dc) & 0xFF);
 				int pan = block.getByte(0x3dd) - 64;
@@ -631,7 +634,6 @@ public class SC88ProGui extends AbstractGui {
 				}
 			}
 			
-//			System.out.println(blockBase.getShort(1160 * 5 + 0x232));
 			
 			if (this.currentDisplayTimer < currentTime) {
 				this.currentDisplayTimer = Long.MAX_VALUE;
@@ -916,7 +918,7 @@ public class SC88ProGui extends AbstractGui {
 			allButton.setPreferredSize(new Dimension(120, 35));
 			centerPanel.add(allButton, BorderLayout.NORTH);
 
-			JPanel bottomPanel = new JPanel(new GridLayout(1, 2, 10, 0)); // 间距缩小
+			JPanel bottomPanel = new JPanel(new GridLayout(1, 2, 10, 0));
 
 			JButton leftButton = new JButton("←");
 			JButton rightButton = new JButton("→");

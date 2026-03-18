@@ -294,7 +294,7 @@ public class Main {
 				file.write(byteArray2);
 			}
 			elapsedMicros += (blockSize * 1000000L) / sampleRate;
-			if (version != null) {
+			if (version != null && instances <= 1) {
 				if (receiver != null && (currentTime >= nextMidiTransmitTime || midiTxNoDelay)) {
 					Pointer ptr = new Pointer(Pointer.nativeValue(tgModule.getPointer().getPointer(version.getEventBufferQueueVariable())) + 192 * 2);
 					int writerIndex = ptr.getShort(10) & 0xFFFF;
