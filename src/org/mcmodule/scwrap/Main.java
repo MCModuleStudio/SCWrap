@@ -278,6 +278,7 @@ public class Main {
 		long currentTime;
 		long elapsedMicros = 0L;
 		long startedTime = System.currentTimeMillis();
+		long skipMidiTransmitTime = startedTime + 1000L;
 		for (int i = 0; i < 1000; i++) // Wait RTOS boot and make JIT works
 			sc.process(out);
 		for (;;) {
@@ -309,7 +310,7 @@ public class Main {
 							readerIndex = 0;
 						if ((result & 0xFF) != 0) {
 							byte[] decodedMessage = packetDecoder.decodeMessage(result);
-							if (decodedMessage != null) {
+							if (decodedMessage != null && skipMidiTransmitTime <= currentTime) {
 								if ((decodedMessage[0] & 0xFF) == 0xF0) {
 									receiver.send(new SysexMessage(decodedMessage, decodedMessage.length), 0L);
 								} else {

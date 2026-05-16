@@ -30,7 +30,11 @@ public class MultiInstancedSoundCanvas extends SoundCanvas {
 		this.instanceCount = instances;
 		this.instances = new SoundCanvas[instances];
 		this.modules = new Pointer[instances];
-		patchTG(libraryPath.getAbsolutePath());
+		try {
+			patchTG(libraryPath.getAbsolutePath());
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 		// Use manual map to prevent copy SCCore to temp dir
 		if (System.getProperty("os.name", "unknown").toLowerCase().startsWith("win") && !Boolean.getBoolean(MultiInstancedSoundCanvas.class.getName() + ".useTempFile")) {
 			PELoader loader = new PELoader(libraryPath);

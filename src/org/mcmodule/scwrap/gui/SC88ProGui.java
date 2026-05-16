@@ -231,10 +231,14 @@ public class SC88ProGui extends AbstractGui {
 
 	public class SCCanvas extends Canvas implements Runnable {
 
+		// WHY???? ORACLE
+		private        final int[] SC_8850_LEVEL2BAR = {-1, 0x08, 0x0c, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x1e, 0x20, 0x22, 0x24, 0x26, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a, 0x5b, 0x5c, 0x5d, 0x5e, 0x5f, 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x78, 0x78, 0x78, 0x78, 0x79, 0x79, 0x79, 0x79, 0x79, 0x7a, 0x7a, 0x7a, 0x7a, 0x7a, 0x7b, 0x7b, 0x7b, 0x7b, 0x7c, 0x7c, 0x7c, 0x7c, 0x7c, 0x7d, 0x7d, 0x7d, 0x7d, 0x7d, 0x7e, 0x7e, 0x7e, 0x7e, 0x7f};
+		private        final int[] SC_88PRO_LEVEL2BAR = {-1, 0x10, 0x10, 0x10, 0x10, 0x10, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x28, 0x28, 0x28, 0x28, 0x28, 0x28, 0x28, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x38, 0x38, 0x38, 0x38, 0x38, 0x38, 0x38, 0x38, 0x38, 0x38, 0x38, 0x38, 0x38, 0x38, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x48, 0x48, 0x48, 0x48, 0x48, 0x48, 0x48, 0x48, 0x48, 0x48, 0x48, 0x48, 0x48, 0x48, 0x50, 0x50, 0x50, 0x50, 0x50, 0x50, 0x50, 0x50, 0x50, 0x50, 0x50, 0x50, 0x50, 0x50, 0x58, 0x58, 0x58, 0x58, 0x58, 0x58, 0x58, 0x58, 0x58, 0x58, 0x58, 0x58, 0x58, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x60, 0x68, 0x68};
 		private static final long serialVersionUID = 5413712560816394611L;
 		private final long[] screenData = new long[] {0x0000000000000000L, 0x0000000000000000L, 0x0000000000000000L, 0x000000000000FFFFL};
 		private final CharacterRenderer characterRenderer = new CharacterRenderer();
-		private final int[] volume                  = new int [PARTS],
+		private final int[] bars                    = new int [PARTS],
+							barTimers               = new int [PARTS],
 							peakHolder              = new int [PARTS];
 		private final long[] peakHolderTimer        = new long[PARTS];
 		private final long[][] displayDotData       = new long[10][4];
@@ -379,6 +383,54 @@ public class SC88ProGui extends AbstractGui {
 		}
 
 		protected void renderCanvas(Graphics2D g) {
+			
+			final long currentTime = System.currentTimeMillis();
+			
+			int[] bars = this.bars;
+			int[] peakHolder = this.peakHolder;
+			long[] peakHolderTimer = this.peakHolderTimer;
+			
+			for (int i = 0; i < PARTS; i++) {
+				int bar = bars[i] >> 3;
+				if (bar >= peakHolder[i] - 1) {
+					peakHolder[i] = bar + 1;
+					peakHolderTimer[i] = currentTime + 300L;
+				}
+				while(currentTime - peakHolderTimer[i] >= 200L) {
+					if (bar < peakHolder[i] - 1) {
+						peakHolder[i]--;
+					}
+					this.peakHolderTimer[i] += 200L;
+				}
+			}
+			
+			Arrays.fill(this.screenData, 0L); // clear screen
+			final boolean doubleMode = this.inspectAll;
+			if (doubleMode) {
+				for(int i = 0; i < 32; i++) {
+					if (peakHolder[i] > 0 && peakHolder[i] <= 16)
+						setPixelAt(i & 0xF, 16 - ((peakHolder[i] + 1) >> 1) - ((i & 0x10) >> 1), true);
+					int bar = bars[i] >> 3;
+					for (int j = 1; j <= bar; j++) {
+						setPixelAt(i & 0xF, 16 - (j + 1) / 2 - ((i & 0x10) >> 1), true);
+					}
+					if ((blockBase.getShort(1160 * part2block(i) + 0x3d6) & 0x200) != 0)
+						setPixelAt(i & 0xF, 15 - ((i & 0x10) >> 1), true);
+				}
+			} else {
+				int off = selectedPart & ~0xF;
+				for (int i = 0; i < 16; i++) {
+					if (peakHolder[i + off] > 0 && peakHolder[i + off] <= 16)
+						setPixelAt(i, 16 - peakHolder[i + off], true);
+					int bar = bars[i + off] >> 3;
+					for (int j = 1; j <= bar; j++) {
+						setPixelAt(i, 16 - j, true);
+					}
+					if ((blockBase.getShort(1160 * part2block(i + off) + 0x3d6) & 0x200) != 0)
+						setPixelAt(i, 15, true);
+				}
+			}
+			
 			g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
 			g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 			g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -593,47 +645,21 @@ public class SC88ProGui extends AbstractGui {
 			
 			final long currentTime = System.currentTimeMillis();
 			
+			int[] barmap = this.SC_88PRO_LEVEL2BAR;
+			int[] bars = this.bars;
+			int[] barTimers = this.barTimers;
+			
 			for (int i = 0; i < PARTS; i++) {
-				this.volume[i] = Math.max(Math.min(level2bar(getBlockLevel(part2block(i))), 15), -1);
-				if(this.volume[i] >= this.peakHolder[i] - 1) {
-					this.peakHolder[i] = this.volume[i] + 1;
-					this.peakHolderTimer[i] = currentTime + 300L;
-				}
-				while(currentTime - this.peakHolderTimer[i] >= 200L) {
-					if(this.volume[i] < this.peakHolder[i] - 1) {
-						this.peakHolder[i]--;
-					}
-					this.peakHolderTimer[i] += 200L;
+				int bar = barmap[Math.max(Math.min(getBlockLevel(part2block(i)) >> 8, 127), 0)];
+				bar = Math.max(Math.min(bar, 127), -1);
+				if (bar >= bars[i]) {
+					bars[i] = bar;
+					barTimers[i] = 4;
+				} else if (bars[i] >= 8 && barTimers[i]-- <= 0) {
+					bars[i] -= 8;
+					barTimers[i] = 4;
 				}
 			}
-			
-			Arrays.fill(this.screenData, 0L); // clear screen
-			final boolean doubleMode = this.inspectAll;
-			if (doubleMode) {
-				for(int i = 0; i < 32; i++) {
-					if (this.peakHolder[i] > 0 && this.peakHolder[i] <= 16)
-						setPixelAt(i & 0xF, 16 - ((this.peakHolder[i] + 1) >> 1) - ((i & 0x10) >> 1), true);
-					int vol = this.volume[i];
-					for (int j = 1; j <= vol; j++) {
-						setPixelAt(i & 0xF, 16 - (j + 1) / 2 - ((i & 0x10) >> 1), true);
-					}
-					if ((blockBase.getShort(1160 * part2block(i) + 0x3d6) & 0x200) != 0)
-						setPixelAt(i & 0xF, 15 - ((i & 0x10) >> 1), true);
-				}
-			} else {
-				int off = selectedPart & ~0xF;
-				for (int i = 0; i < 16; i++) {
-					if (this.peakHolder[i + off] > 0 && this.peakHolder[i + off] <= 16)
-						setPixelAt(i, 16 - this.peakHolder[i + off], true);
-					int vol = this.volume[i + off];
-					for (int j = 1; j <= vol; j++) {
-						setPixelAt(i, 16 - j, true);
-					}
-					if ((blockBase.getShort(1160 * part2block(i + off) + 0x3d6) & 0x200) != 0)
-						setPixelAt(i, 15, true);
-				}
-			}
-			
 			
 			if (this.currentDisplayTimer < currentTime) {
 				this.currentDisplayTimer = Long.MAX_VALUE;
