@@ -18,6 +18,7 @@ import javax.sound.midi.ShortMessage;
 import javax.sound.midi.SysexMessage;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioFormat.Encoding;
+import javax.swing.JFrame;
 
 import org.mcmodule.scwrap.gui.*;
 import org.mcmodule.scwrap.player.MidiPlayer;
@@ -166,6 +167,8 @@ public class Main {
 		}
 		
 		AbstractGui frame = null;
+		SCOscilloscopeView oscView = null;
+		JFrame oscFrame = null;
 		if (guiEnabled && instances <= 1) {
 			if (version != null) {
 //				FIXME
@@ -176,11 +179,23 @@ public class Main {
 //					e.printStackTrace();
 //				}
 				frame = new SC88ProGui(sc, tgModule, version);
+				if (Boolean.getBoolean("org.mcmodule.scwrap.Main.showMixerOscilloscopeView")) { // For test only
+					oscView = new SCOscilloscopeView(version, tgModule.getPointer(), Boolean.getBoolean("org.mcmodule.scwrap.Main.showAllMixer"));
+					oscFrame = new JFrame("Mixer oscilloscope view");
+
+					oscFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+
+					oscFrame.setContentPane(oscView);
+
+					oscFrame.setSize(1600, 900);
+					oscFrame.setLocationRelativeTo(null);
+				}
 			} else {
 				System.out.println("Gui require supported SCCore version!");
 			}
 		}
 		final AbstractGui gui = frame;
+		final JFrame oscFrame2 = oscFrame;
 		
 		if (map != 4) {
 			sc.changeMap(map);
@@ -259,6 +274,8 @@ public class Main {
 		
 		if (gui != null)
 			EventQueue.invokeLater(() -> gui.setVisible(true));
+		if (oscFrame2 != null)
+			EventQueue.invokeLater(() -> oscFrame2.setVisible(true));
 		
 		if (sequencerA != null)
 			sequencerA.start();
@@ -287,6 +304,8 @@ public class Main {
 			sc.process(out);
 			if (gui != null)
 				gui.process(out);
+			if (oscView != null)
+				oscView.update();
 			frames += blockSize;
 			toByteArray(out, byteArray);
 			if (line != null)
