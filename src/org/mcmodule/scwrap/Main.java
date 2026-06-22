@@ -274,6 +274,7 @@ public class Main {
 		
 		if (gui != null)
 			EventQueue.invokeLater(() -> gui.setVisible(true));
+		
 		if (oscFrame2 != null)
 			EventQueue.invokeLater(() -> oscFrame2.setVisible(true));
 		
@@ -393,7 +394,10 @@ public class Main {
 		sequencerA = sequencerB = null;
 		
 		if (gui != null)
-			gui.dispose();
+			EventQueue.invokeLater(gui::dispose);
+		
+		if (oscFrame2 != null)
+			EventQueue.invokeLater(oscFrame2::dispose);
 		
 		if (line != null)
 			line.close();

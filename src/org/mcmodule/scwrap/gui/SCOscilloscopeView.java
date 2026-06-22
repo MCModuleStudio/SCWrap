@@ -21,6 +21,7 @@ public class SCOscilloscopeView extends JPanel implements Runnable {
 	private static final int[] PARTS  = new int[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 10, 11, 12, 13, 14, 15}; 
 	private static final int INTERP_MAX = 1024;
 	private static final float[][] INTERP_COEFF = createInterpCoeff();
+	private static final float gain = Float.parseFloat(System.getProperty("org.mcmodule.scwrap.gui.SCOscilloscopeView.gain", "4"));
 
 	private final int channelCount;
 	private final int columnCount;
@@ -216,8 +217,9 @@ public class SCOscilloscopeView extends JPanel implements Runnable {
 			int prevY = 0;
 			
 			float[] output = this.oscilloscope.output;
+			float gain = /*this.oscilloscope.getGain() * */SCOscilloscopeView.gain;
 			for (int i = 0, len = output.length; i < w; i++) {
-				float out = cubicSample(output, (i / (float)w) * len) * 4f;
+				float out = cubicSample(output, (i / (float)w) * len) * gain;
 				int y = Math.max(Math.min((int) Math.round(-out * halfH), +halfH), -halfH) + halfH;
 				if (i != 0) {
 					g.drawLine(prevX, prevY, i, y);
@@ -454,7 +456,7 @@ public class SCOscilloscopeView extends JPanel implements Runnable {
 		float[] c = INTERP_COEFF[fract];
 
 		return sample(array, idx - 1, len) * c[0]
-			 + sample(array, idx,	 len) * c[1]
+			 + sample(array, idx,     len) * c[1]
 			 + sample(array, idx + 1, len) * c[2]
 			 + sample(array, idx + 2, len) * c[3];
 	}

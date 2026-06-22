@@ -71,8 +71,8 @@ public class Oscilloscope {
         return displaySamples;
     }
 
-    public int getVertexCount() {
-        return displaySamples;
+    public float getGain() {
+        return gain;
     }
 
     public int compute(float[] input, double cellWidth, double cellHeight) {
@@ -185,7 +185,7 @@ public class Oscilloscope {
         }
 
         float target = peak > 1.0e-4f ? 1f / peak : 0f;
-        gain += OSC_AGC_SPEED * (target - gain);
+        gain = getGain() + OSC_AGC_SPEED * (target - gain);
 
         return display;
     }
